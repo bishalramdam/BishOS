@@ -28,6 +28,13 @@ static const char *root_devices[] = {
 
 #define NEWROOT "/newroot"
 
+// Only ever adopt a filesystem we made. mke2fs labels the disk image BISHOS,
+// and we check that label by reading the superblock directly -- never by
+// mounting first. This matters on real hardware: without it, booting from a
+// USB stick on a PC would happily mount and switch_root into whatever Linux
+// install it found on the internal drive.
+#define ROOT_LABEL "BISHOS"
+
 // Set by the shutdown signal handler; checked by the PID 1 reap loop.
 static volatile sig_atomic_t shutdown_signal = 0;
 
@@ -77,13 +84,39 @@ static void do_shutdown(int sig) {
 //
 // This is what an initramfs is actually for: not "being the OS", but finding
 // the real root and getting out of the way.
+// True only if the device holds an ext filesystem whose label is ours. The
+// ext superblock sits at byte 1024: magic 0xEF53 at +56, label at +120.
+// Reading it costs nothing and, unlike mounting, cannot modify the device.
+static int is_bishos_root(const char *dev) {
+    unsigned char sb[1024];
+    int fd = open(dev, O_RDONLY);
+
+    if (fd < 0) {
+        return 0;
+    }
+    if (pread(fd, sb, sizeof sb, 1024) != (ssize_t) sizeof sb) {
+        close(fd);
+        return 0;
+    }
+    close(fd);
+
+    if ((sb[56] | (sb[57] << 8)) != 0xEF53) {
+        return 0; // not ext2/3/4 at all
+    }
+
+    char label[17];
+    memcpy(label, sb + 120, 16);
+    label[16] = '\0';
+    return strcmp(label, ROOT_LABEL) == 0;
+}
+
 static void try_switch_root(void) {
     const char *dev = NULL;
 
     // Block devices register a moment after PID 1 starts; wait briefly.
     for (int i = 0; i < 50 && !dev; i++) {
         for (int d = 0; root_devices[d]; d++) {
-            if (access(root_devices[d], F_OK) == 0) {
+            if (access(root_devices[d], F_OK) == 0 && is_bishos_root(root_devices[d])) {
                 dev = root_devices[d];
                 break;
             }
