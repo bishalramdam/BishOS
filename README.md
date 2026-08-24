@@ -96,6 +96,13 @@ Builds for **two architectures** from the same source:
    Growing works in place because the image is a whole-disk ext4 filesystem
    with no partition table -- there is no partition to move before resizing.
 
+   The VM gets 2 GB of RAM by default (`make MEMORY=4G run` to change it).
+   That figure also sizes `/tmp`: it is a tmpfs, so it defaults to half of
+   RAM and lives *in* RAM. If an installer dies with `No space left on
+   device` while `df -h /` shows plenty free, `/tmp` is what filled up --
+   either raise `MEMORY` or point the installer at disk with
+   `TMPDIR=/var/tmp`.
+
 4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
    the same `grub.cfg`; only the kernel binary differs:
    ```bash

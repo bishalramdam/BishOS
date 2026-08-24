@@ -17,6 +17,11 @@ INITRAMFS = $(BUILD_DIR)/initramfs.cpio.gz
 DISK = $(BUILD_DIR)/bishos-disk.img
 DISK_SIZE = 5G
 
+# RAM for the VM. Note this also sizes /tmp, which is a tmpfs and therefore
+# defaults to half of RAM -- 256M of RAM left /tmp at 128M, too small for
+# installers that unpack a bundled runtime there.
+MEMORY = 2G
+
 # Kernel source pin -- bump both together (hash from cdn.kernel.org sha256sums.asc)
 KERNEL_VERSION = 6.18.46
 KERNEL_SHA256 = f5d44b93808b02cc2969c5404ba081d97523719c9fd2ba2de6db318b4141cca0
@@ -183,7 +188,7 @@ run: all disk
 		-drive file=$(DISK),if=virtio,format=raw \
 		-nic user,model=$(NIC_MODEL) \
 		-nographic \
-		-m 256M
+		-m $(MEMORY)
 
 # Used by CI to key the kernel source cache on the pinned version
 print-kernel-version:
