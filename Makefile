@@ -7,6 +7,10 @@ ARCH ?= x86_64
 # used in ISO filenames, so a release artifact always names what it is.
 VERSION = 0.3.0
 
+# Alpine release the package manager installs from. Pinned like the kernel:
+# "latest-stable" would silently change the package set over time.
+ALPINE_RELEASE = v3.24
+
 BUILD_DIR = build/$(ARCH)
 ROOTFS_DIR = $(BUILD_DIR)/rootfs
 INITRAMFS = $(BUILD_DIR)/initramfs.cpio.gz
@@ -42,17 +46,20 @@ endif
 
 all: kernel rootfs initramfs
 
-# 1. Compile C init (PID 1) and install BusyBox + symlinks + user profiles
+# 1. Compile C init (PID 1) and install BusyBox + symlinks + user profiles +
+# the CA certificate bundle (without it nothing can verify an HTTPS server:
+# apk cannot fetch packages and wget cannot fetch https:// URLs)
 rootfs:
 	mkdir -p $(BUILD_DIR)
 	docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/work -w /work alpine:latest sh -c "\
-		apk add --no-cache gcc musl-dev busybox-static && \
+		apk add --no-cache gcc musl-dev busybox-static ca-certificates && \
 		rm -rf /work/$(ROOTFS_DIR) && \
 		mkdir -p /work/$(ROOTFS_DIR)/bin /work/$(ROOTFS_DIR)/sbin \
 		         /work/$(ROOTFS_DIR)/proc /work/$(ROOTFS_DIR)/sys \
 		         /work/$(ROOTFS_DIR)/dev /work/$(ROOTFS_DIR)/root \
 		         /work/$(ROOTFS_DIR)/home/bishal /work/$(ROOTFS_DIR)/tmp \
-		         /work/$(ROOTFS_DIR)/etc /work/$(ROOTFS_DIR)/usr/share/udhcpc && \
+		         /work/$(ROOTFS_DIR)/etc /work/$(ROOTFS_DIR)/usr/share/udhcpc \
+		         /work/$(ROOTFS_DIR)/etc/ssl/certs && \
 		gcc -static -O2 -DBISHOS_VERSION=$(VERSION) /work/src/init.c -o /work/$(ROOTFS_DIR)/init && \
 		cp /bin/busybox.static /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod +x /work/$(ROOTFS_DIR)/bin/busybox && \
@@ -62,6 +69,8 @@ rootfs:
 		for app in \$$(../bin/busybox --list); do ln -sf /bin/busybox \$$app; done && \
 		cp -r /work/etc/* /work/$(ROOTFS_DIR)/etc/ && \
 		cp /work/etc/udhcpc/default.script /work/$(ROOTFS_DIR)/usr/share/udhcpc/default.script && \
+		cp /etc/ssl/certs/ca-certificates.crt /work/$(ROOTFS_DIR)/etc/ssl/certs/ca-certificates.crt && \
+		cp /etc/ssl/certs/ca-certificates.crt /work/$(ROOTFS_DIR)/etc/ssl/cert.pem && \
 		find /work/$(ROOTFS_DIR) -type d -exec chmod 755 {} + && \
 		find /work/$(ROOTFS_DIR)/etc -type f -exec chmod 644 {} + && \
 		chmod 755 /work/$(ROOTFS_DIR)/etc/udhcpc/default.script /work/$(ROOTFS_DIR)/usr/share/udhcpc/default.script && \
@@ -95,7 +104,12 @@ kernel:
 		mkdir -p /src/$(BUILD_DIR) && cp /kbuild/build-$(ARCH)/$(KERNEL_ARTIFACT) /src/$(KERNEL)"
 
 # 4. Create the persistent root filesystem: a raw ext4 disk image populated
-# from the same rootfs staging tree. mke2fs -d fills the filesystem without
+# from the same rootfs staging tree, plus the apk package manager.
+#
+# apk goes on the disk and NOT in the initramfs, for two reasons: the
+# initramfs is loaded into RAM in full on every boot so every megabyte is a
+# permanent cost, and a package manager without persistence is pointless --
+# anything it installed would vanish at the next reboot. mke2fs -d fills the filesystem without
 # mounting it, so this needs no loop device and no privileged container.
 # The image is only created if missing -- rebuilding must not wipe the data
 # that makes it worth having (use disk-reset for that).
@@ -105,9 +119,19 @@ disk: rootfs
 	else \
 		echo "Creating $(DISK) ($(DISK_SIZE) ext4)"; \
 		docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/work -w /work alpine:latest sh -c "\
-			apk add --no-cache e2fsprogs e2fsprogs-extra > /dev/null && \
+			apk add --no-cache e2fsprogs e2fsprogs-extra apk-tools-static > /dev/null && \
 			rm -rf /diskroot && cp -a /work/$(ROOTFS_DIR) /diskroot && \
 			cp /work/$(ROOTFS_DIR)/init /diskroot/sbin/init && \
+			mkdir -p /diskroot/etc/apk/keys /diskroot/var/lib/apk /diskroot/var/cache/apk && \
+						cp /sbin/apk.static /diskroot/sbin/apk.static && \
+			ln -sf apk.static /diskroot/sbin/apk && \
+			cp /etc/apk/keys/*.rsa.pub /diskroot/etc/apk/keys/ && \
+			printf '%s\n' \
+				'https://dl-cdn.alpinelinux.org/alpine/$(ALPINE_RELEASE)/main' \
+				'https://dl-cdn.alpinelinux.org/alpine/$(ALPINE_RELEASE)/community' \
+				> /diskroot/etc/apk/repositories && \
+			rm -rf /diskroot/etc/ssl && \
+			/sbin/apk.static --root /diskroot --initdb add alpine-baselayout-data ca-certificates-bundle > /dev/null && \
 			chown -R 0:0 /diskroot && \
 			chmod 1777 /diskroot/tmp && chmod 700 /diskroot/root && \
 			truncate -s $(DISK_SIZE) /work/$(DISK) && \
