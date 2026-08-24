@@ -65,13 +65,17 @@ will not mount.
 
 - Run `e2fsck -p` on the root device from the initramfs, before mounting
 
-### 2.3 The clock is wrong and nothing fixes it
-No RTC read, no NTP. This fails in a *confusing* way: TLS checks certificate
-validity dates, so a badly wrong clock makes `apk` and `curl` fail with
-certificate errors that look like a CA problem but are not.
+### 2.3 The clock drifts, and nothing corrects it
+Not as bad as first assumed: the kernel already sets the time from the
+hardware clock at boot (`CONFIG_RTC_HCTOSYS` + PL031 on arm64, CMOS on
+x86_64), which is why TLS works at all -- certificate validation checks
+dates, so it would fail outright on a badly wrong clock.
 
-- Read the hardware clock at boot (`hwclock -s`)
-- Optionally `apk add chrony` or busybox `ntpd` once 1.2 exists
+What is missing is *correction*: nothing keeps time in sync, so a long-lived
+VM drifts, and a snapshot resumed much later starts wrong. When it bites it
+looks like a CA problem rather than a clock problem.
+
+- `apk add chrony`, or busybox `ntpd`, once something can start services (1.2)
 
 ### 2.4 No logging
 `dmesg` is the only record and it does not survive a reboot. No syslog.
