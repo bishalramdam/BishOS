@@ -16,28 +16,33 @@ int main() {
     mkdir("/proc", 0755);
     mkdir("/sys", 0755);
     mkdir("/dev", 0755);
+    mkdir("/home", 0755);
+    mkdir("/home/bishal", 0755);
 
     mount("proc", "/proc", "proc", 0, NULL);
     mount("sysfs", "/sys", "sysfs", 0, NULL);
     mount("devtmpfs", "/dev", "devtmpfs", 0, NULL);
 
-    // 3. Set standard environment variables
+    // 3. Set hostname
+    sethostname("BishOS", 6);
+
+    // 4. Set base environment variables
     setenv("PATH", "/bin:/sbin:/usr/bin:/usr/sbin", 1);
     setenv("HOME", "/root", 1);
     setenv("USER", "root", 1);
     setenv("TERM", "linux", 1);
 
-    // 4. Welcome banner
+    // 5. Welcome banner
     printf("\n");
     printf("==========================================\n");
     printf("         Welcome to BishOS v0.2!          \n");
     printf("     Linux Kernel + BusyBox Userspace     \n");
     printf("==========================================\n");
     printf("\n");
-    printf("Available commands: ls, ps, cat, free, top, vi, etc.\n");
-    printf("To cleanly shut down the OS, run: poweroff -f\n\n");
+    printf("Type 'whoami', 'id', 'll', or 'su - bishal'\n");
+    printf("To cleanly shut down the OS, run: poweroff\n\n");
 
-    // 5. PID 1 loop: launch /bin/sh with full controlling TTY job control
+    // 6. PID 1 loop: launch login shell with controlling TTY
     while (1) {
         pid_t pid = fork();
 
@@ -61,18 +66,18 @@ int main() {
                 }
             }
 
-            // Execute the interactive shell
-            char *argv[] = {"/bin/sh", NULL};
+            // Execute login shell (-l flag executes /etc/profile)
+            char *argv[] = {"/bin/sh", "-l", NULL};
             execv("/bin/sh", argv);
 
-            // Fallback: try executing busybox directly
-            char *bb_argv[] = {"/bin/busybox", "sh", NULL};
+            // Fallback
+            char *bb_argv[] = {"/bin/busybox", "sh", "-l", NULL};
             execv("/bin/busybox", bb_argv);
 
             perror("[BishOS] Failed to execute shell");
             exit(1);
         } else if (pid > 0) {
-            // Parent (PID 1): wait for the shell to exit
+            // Parent (PID 1): wait for the shell session to exit
             int status;
             waitpid(pid, &status, 0);
             printf("\n[BishOS] Shell session ended. Respawning shell...\n\n");

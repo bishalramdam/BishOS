@@ -68,6 +68,7 @@ A minimal Linux operating system built modularly like **Lego blocks**: combining
   - [x] Integrate static BusyBox
   - [x] Mount pseudofilesystems (`/proc`, `/sys`, `/dev`)
   - [x] Interactive `sh` prompt with controlling TTY & job control
+  - [x] User accounts & shell profile (`/etc/passwd`, `/etc/group`, `/etc/profile`, `/etc/hostname`)
 - [ ] **Phase 3: Kernel Compilation from Source**
   - [ ] Download mainline kernel source (`kernel.org`)
   - [ ] Custom minimal `defconfig`
@@ -81,6 +82,12 @@ A minimal Linux operating system built modularly like **Lego blocks**: combining
 
 ```
 ├── Makefile            # Build and run automation
+├── etc/                # System configuration overlay
+│   ├── passwd          # User account database (root, bishal)
+│   ├── group           # Group definitions
+│   ├── hostname        # System hostname (BishOS)
+│   ├── hosts           # Local loopback resolution
+│   └── profile         # Login shell environment, aliases, colors
 ├── src/
 │   └── init.c          # Minimal C init (PID 1)
 ├── build/              # Generated build artifacts (gitignored)
