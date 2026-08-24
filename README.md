@@ -94,8 +94,8 @@ Builds for **two architectures** from the same source:
 4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
    the same `grub.cfg`; only the kernel binary differs:
    ```bash
-   make ARCH=arm64 iso   # -> build/arm64/bishos-0.3.0-arm64.iso   (UEFI)
-   make iso              # -> build/x86_64/bishos-0.3.0-x86_64.iso (UEFI + BIOS)
+   make ARCH=arm64 iso   # -> build/arm64/bishos-arm64_v0.4.0.iso   (UEFI)
+   make iso              # -> build/x86_64/bishos-x86_64_v0.4.0.iso (UEFI + BIOS)
    ```
    `VERSION` in the Makefile is the single source of truth: it names the ISO
    and is compiled into init's banner, so a booted system always reports the
@@ -112,8 +112,8 @@ Builds for **two architectures** from the same source:
    [tagged releases](https://github.com/bishalramdam/BishOS/releases), and
    published to GitHub Packages as OCI artifacts:
    ```bash
-   oras pull ghcr.io/bishalramdam/bishos:0.3.0-arm64
-   oras pull ghcr.io/bishalramdam/bishos:0.3.0-x86_64
+   oras pull ghcr.io/bishalramdam/bishos:0.4.0-arm64
+   oras pull ghcr.io/bishalramdam/bishos:0.4.0-x86_64
    ```
    In VMware Fusion: New VM -> drag the ISO in -> "Other Linux 6.x 64-bit Arm".
    The same shell lands on the serial port in QEMU and on the screen in

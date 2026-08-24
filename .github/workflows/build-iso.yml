@@ -5,7 +5,6 @@ name: Build ISOs
 # and the arm64 kernel needs no cross-toolchain.
 on:
   push:
-    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -42,7 +41,7 @@ jobs:
           BISHOS_VERSION=$(make -s print-version)
           echo "bishos=$BISHOS_VERSION" >> "$GITHUB_OUTPUT"
           echo "kernel=$(make -s print-kernel-version)" >> "$GITHUB_OUTPUT"
-          echo "iso=bishos-$BISHOS_VERSION-${{ matrix.arch }}.iso" >> "$GITHUB_OUTPUT"
+          echo "iso=bishos-${{ matrix.arch }}_v$BISHOS_VERSION.iso" >> "$GITHUB_OUTPUT"
           # A tag must agree with the Makefile, or the artifact would be
           # named one version and released as another.
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
@@ -101,26 +100,33 @@ jobs:
           # OVMF, qemu-efi-aarch64 ships AAVMF. Installing the wrong one
           # leaves QEMU with no -pflash to boot from.
           if [ "$ARCH" = "arm64" ]; then
-            sudo apt-get install -y -qq qemu-system-arm qemu-efi-aarch64 > /dev/null
+            sudo apt-get install -y -qq qemu-system-arm qemu-efi-aarch64 > /dev/null 2>&1
             cp /usr/share/AAVMF/AAVMF_CODE.fd /tmp/fw.fd
             cp /usr/share/AAVMF/AAVMF_VARS.fd /tmp/vars.fd
             set -- qemu-system-aarch64 -machine virt -cpu max
           else
-            sudo apt-get install -y -qq qemu-system-x86 ovmf > /dev/null
+            sudo apt-get install -y -qq qemu-system-x86 ovmf > /dev/null 2>&1
             cp /usr/share/OVMF/OVMF_CODE_4M.fd /tmp/fw.fd
             cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vars.fd
             set -- qemu-system-x86_64
           fi
 
-          # -accel kvm -accel tcg: use hardware virtualization when the runner
-          # exposes /dev/kvm, fall back to emulation when it does not.
-          "$@" -accel kvm -accel tcg -m 512 \
+          # Only ask for KVM if the runner actually exposes it; otherwise QEMU
+          # prints two permission errors before falling back to emulation.
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+            ACCEL="-accel kvm"
+          else
+            ACCEL="-accel tcg"
+            echo "note: /dev/kvm unavailable, emulating (slower)"
+          fi
+
+          "$@" $ACCEL -m 512 \
             -drive if=pflash,format=raw,readonly=on,file=/tmp/fw.fd \
             -drive if=pflash,format=raw,file=/tmp/vars.fd \
             -cdrom "$ISO" -nographic -no-reboot > boot.log 2>&1 &
           QEMU_PID=$!
 
-          for _ in $(seq 1 120); do
+          for _ in $(seq 1 150); do
             grep -aqE "Welcome to BishOS|Kernel panic" boot.log && break
             kill -0 "$QEMU_PID" 2>/dev/null || break
             sleep 2
@@ -129,7 +135,7 @@ jobs:
           wait "$QEMU_PID" 2>/dev/null || true
 
           echo "--- boot log tail ---"
-          tail -40 boot.log
+          tr -d "\000" < boot.log | tail -40
           if grep -aq "Kernel panic" boot.log; then
             echo "::error::kernel panic during boot"; exit 1
           fi

@@ -5,7 +5,7 @@ ARCH ?= x86_64
 
 # Single source of truth for the version: compiled into init's banner and
 # used in ISO filenames, so a release artifact always names what it is.
-VERSION = 0.3.0
+VERSION = 0.4.0
 
 # Alpine release the package manager installs from. Pinned like the kernel:
 # "latest-stable" would silently change the package set over time.
@@ -148,7 +148,7 @@ disk-reset:
 # architecture; only the kernel binary differs, and it is staged under the
 # same name (/boot/vmlinuz). grub-mkrescue emits a UEFI boot path for both
 # arches, and on x86_64 additionally a legacy-BIOS one in the same image.
-ISO = $(BUILD_DIR)/bishos-$(VERSION)-$(ARCH).iso
+ISO = $(BUILD_DIR)/bishos-$(ARCH)_v$(VERSION).iso
 
 iso: all
 	rm -rf $(BUILD_DIR)/iso
@@ -158,7 +158,7 @@ iso: all
 	cp grub/grub.cfg $(BUILD_DIR)/iso/boot/grub/
 	docker build --platform $(DOCKER_PLATFORM) -q -f Dockerfile.iso -t bishos-iso:$(ARCH) .
 	docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/src bishos-iso:$(ARCH) \
-		sh -c "cd /src/$(BUILD_DIR) && grub-mkrescue -o bishos-$(VERSION)-$(ARCH).iso iso/"
+		sh -c "cd /src/$(BUILD_DIR) && grub-mkrescue -o bishos-$(ARCH)_v$(VERSION).iso iso/"
 
 # 6. Boot BishOS in QEMU: initramfs finds the virtio disk and switch_roots
 # into it, so anything written to / survives a reboot.
