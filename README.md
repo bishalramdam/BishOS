@@ -64,10 +64,10 @@ A minimal Linux operating system built modularly like **Lego blocks**: combining
   - [x] Custom static C `/init` running as PID 1
   - [x] `newc` cpio.gz initramfs generation
   - [x] Direct kernel boot in QEMU with serial console
-- [ ] **Phase 2: Interactive Shell & Core Utilities**
-  - [ ] Integrate static BusyBox
-  - [ ] Mount pseudofilesystems (`/proc`, `/sys`, `/dev`)
-  - [ ] Interactive `sh` prompt with job control
+- [x] **Phase 2: Interactive Shell & Core Utilities**
+  - [x] Integrate static BusyBox
+  - [x] Mount pseudofilesystems (`/proc`, `/sys`, `/dev`)
+  - [x] Interactive `sh` prompt with controlling TTY & job control
 - [ ] **Phase 3: Kernel Compilation from Source**
   - [ ] Download mainline kernel source (`kernel.org`)
   - [ ] Custom minimal `defconfig`

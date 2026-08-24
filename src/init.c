@@ -1,25 +1,85 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/mount.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <sys/ioctl.h>
+#include <termios.h>
 
 int main() {
-    // Disable stdout buffering so characters are printed immediately to the serial console
+    // 1. Disable stdout buffering for immediate serial console output
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    printf("\n");
-    printf("==========================================\n");
-    printf("        Welcome to BishOS!                \n");
-    printf("  Running bare-metal Linux Userspace      \n");
-    printf("  PID: %d                                \n", getpid());
-    printf("==========================================\n");
-    printf("\n");
-    printf("Kernel booted successfully into /init!\n");
-    printf("System is now running in an idle loop...\n\n");
+    // 2. Create mount points and mount essential kernel filesystems
+    mkdir("/proc", 0755);
+    mkdir("/sys", 0755);
+    mkdir("/dev", 0755);
 
-    // PID 1 must NEVER return or exit.
-    // If PID 1 exits, the Linux kernel panics and halts the CPU.
+    mount("proc", "/proc", "proc", 0, NULL);
+    mount("sysfs", "/sys", "sysfs", 0, NULL);
+    mount("devtmpfs", "/dev", "devtmpfs", 0, NULL);
+
+    // 3. Set standard environment variables
+    setenv("PATH", "/bin:/sbin:/usr/bin:/usr/sbin", 1);
+    setenv("HOME", "/root", 1);
+    setenv("USER", "root", 1);
+    setenv("TERM", "linux", 1);
+
+    // 4. Welcome banner
+    printf("\n");
+    printf("==========================================\n");
+    printf("         Welcome to BishOS v0.2!          \n");
+    printf("     Linux Kernel + BusyBox Userspace     \n");
+    printf("==========================================\n");
+    printf("\n");
+    printf("Available commands: ls, ps, cat, free, top, vi, etc.\n");
+    printf("To cleanly shut down the OS, run: poweroff -f\n\n");
+
+    // 5. PID 1 loop: launch /bin/sh with full controlling TTY job control
     while (1) {
-        sleep(5);
-        printf("[BishOS heartbeat] Still running as PID %d...\n", getpid());
+        pid_t pid = fork();
+
+        if (pid == 0) {
+            // Create a new process session
+            setsid();
+
+            // Attach /dev/ttyS0 as the controlling terminal (TIOCSCTTY)
+            int fd = open("/dev/ttyS0", O_RDWR);
+            if (fd < 0) {
+                fd = open("/dev/console", O_RDWR);
+            }
+
+            if (fd >= 0) {
+                ioctl(fd, TIOCSCTTY, 1);
+                dup2(fd, 0); // stdin
+                dup2(fd, 1); // stdout
+                dup2(fd, 2); // stderr
+                if (fd > 2) {
+                    close(fd);
+                }
+            }
+
+            // Execute the interactive shell
+            char *argv[] = {"/bin/sh", NULL};
+            execv("/bin/sh", argv);
+
+            // Fallback: try executing busybox directly
+            char *bb_argv[] = {"/bin/busybox", "sh", NULL};
+            execv("/bin/busybox", bb_argv);
+
+            perror("[BishOS] Failed to execute shell");
+            exit(1);
+        } else if (pid > 0) {
+            // Parent (PID 1): wait for the shell to exit
+            int status;
+            waitpid(pid, &status, 0);
+            printf("\n[BishOS] Shell session ended. Respawning shell...\n\n");
+        } else {
+            perror("[BishOS] fork failed");
+            sleep(2);
+        }
     }
 
     return 0;
