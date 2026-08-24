@@ -12,6 +12,14 @@
 #include <termios.h>
 #include <errno.h>
 
+// Block devices we look for a persistent root filesystem on, in order.
+// virtio is what QEMU gives us; sd*/nvme* cover VMware and real hardware.
+static const char *root_devices[] = {
+    "/dev/vda", "/dev/sda", "/dev/nvme0n1", NULL
+};
+
+#define NEWROOT "/newroot"
+
 // Set by the shutdown signal handler; checked by the PID 1 reap loop.
 static volatile sig_atomic_t shutdown_signal = 0;
 
@@ -19,8 +27,9 @@ static void handle_shutdown(int sig) {
     shutdown_signal = sig;
 }
 
-// Graceful shutdown: terminate everything, reap it, sync, then ask the
-// kernel to power off / halt / reboot. Never returns.
+// Graceful shutdown: terminate everything, reap it, flush and remount the
+// root read-only so ext4 is clean, then ask the kernel to power off / halt /
+// reboot. Never returns.
 static void do_shutdown(int sig) {
     const char *what = (sig == SIGTERM) ? "Rebooting"
                      : (sig == SIGUSR1) ? "Halting"
@@ -34,6 +43,11 @@ static void do_shutdown(int sig) {
         ;                // bury whatever is left
 
     sync();
+    // Read-only remount is what keeps a persistent root from needing fsck
+    // on the next boot. Harmless on a RAM-only initramfs boot.
+    if (mount(NULL, "/", NULL, MS_REMOUNT | MS_RDONLY, NULL) != 0) {
+        printf("[BishOS] note: could not remount / read-only (%s)\n", strerror(errno));
+    }
     printf("[BishOS] Bye!\n");
 
     if (sig == SIGTERM) {
@@ -49,56 +63,146 @@ static void do_shutdown(int sig) {
     }
 }
 
-int main() {
+// Early boot, initramfs stage: find a persistent root filesystem, move the
+// pseudo-filesystems onto it, and hand over to the copy of ourselves living
+// there. Returns only on failure -- on success we have exec'd and are gone.
+//
+// This is what an initramfs is actually for: not "being the OS", but finding
+// the real root and getting out of the way.
+static void try_switch_root(void) {
+    const char *dev = NULL;
+
+    // Block devices register a moment after PID 1 starts; wait briefly.
+    for (int i = 0; i < 50 && !dev; i++) {
+        for (int d = 0; root_devices[d]; d++) {
+            if (access(root_devices[d], F_OK) == 0) {
+                dev = root_devices[d];
+                break;
+            }
+        }
+        if (!dev) {
+            usleep(100000); // 100ms
+        }
+    }
+
+    if (!dev) {
+        return; // no disk attached: caller falls back to running from RAM
+    }
+
+    mkdir(NEWROOT, 0755);
+    if (mount(dev, NEWROOT, "ext4", 0, NULL) != 0) {
+        printf("[BishOS] %s is not a mountable ext4 root (%s)\n", dev, strerror(errno));
+        return;
+    }
+
+    // Refuse to switch into a filesystem with no init to hand over to.
+    if (access(NEWROOT "/sbin/init", X_OK) != 0) {
+        printf("[BishOS] %s has no /sbin/init, staying on initramfs\n", dev);
+        umount(NEWROOT);
+        return;
+    }
+
+    printf("[BishOS] persistent root found on %s, switching over...\n", dev);
+
+    // Carry the already-mounted pseudo-filesystems across instead of
+    // unmounting and re-mounting them on the other side.
+    mount("/proc", NEWROOT "/proc", NULL, MS_MOVE, NULL);
+    mount("/sys",  NEWROOT "/sys",  NULL, MS_MOVE, NULL);
+    mount("/dev",  NEWROOT "/dev",  NULL, MS_MOVE, NULL);
+
+    // Promote NEWROOT to /. After this the initramfs is unreachable (its
+    // pages stay in RAM -- a real switch_root deletes them first, which we
+    // skip for simplicity).
+    if (chdir(NEWROOT) != 0 || mount(".", "/", NULL, MS_MOVE, NULL) != 0
+            || chroot(".") != 0) {
+        perror("[BishOS] switch_root failed");
+        return;
+    }
+    chdir("/");
+
+    // Hand over to the real root's init. The flag tells it that the early
+    // boot work is already done, so it does not try to switch again.
+    char *argv[] = {"/sbin/init", "--real-root", NULL};
+    execv("/sbin/init", argv);
+    perror("[BishOS] could not exec /sbin/init on the real root");
+}
+
+// Write a file only if it does not exist yet. On a persistent root the user's
+// edits must survive reboots, so these are seeded once, not rewritten.
+static void seed_file(const char *path, uid_t owner, const char *text) {
+    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (fd < 0) {
+        return; // already there (or unwritable) -- leave it alone
+    }
+    if (write(fd, text, strlen(text)) < 0) {
+        perror("[BishOS] seed_file");
+    }
+    if (owner != 0 && fchown(fd, owner, owner) != 0) {
+        perror("[BishOS] seed_file chown");
+    }
+    close(fd);
+}
+
+int main(int argc, char **argv) {
     // 1. Disable stdout buffering for immediate serial console output
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    // 2. Create mount points and mount essential kernel filesystems
-    mkdir("/proc", 0755);
-    mkdir("/sys", 0755);
-    mkdir("/dev", 0755);
+    int real_root = (argc > 1 && strcmp(argv[1], "--real-root") == 0);
+    const char *storage;
+
+    // 2. Mount essential kernel filesystems. After a switch_root these came
+    // across with us, so only the initramfs stage needs to mount them.
+    if (!real_root) {
+        mkdir("/proc", 0755);
+        mkdir("/sys", 0755);
+        mkdir("/dev", 0755);
+        mount("proc", "/proc", "proc", 0, NULL);
+        mount("sysfs", "/sys", "sysfs", 0, NULL);
+        mount("devtmpfs", "/dev", "devtmpfs", 0, NULL);
+
+        // 3. Try to leave the initramfs for a real, persistent root.
+        try_switch_root();
+
+        // Still here: no usable disk. Keep going in RAM.
+        printf("\n[BishOS] no persistent root; running from RAM "
+               "(changes are lost on reboot)\n");
+        storage = "RAM only (initramfs)";
+    } else {
+        storage = "persistent disk (ext4)";
+        // /tmp belongs in RAM even when the root is on disk.
+        mount("tmpfs", "/tmp", "tmpfs", 0, "mode=1777");
+    }
+
+    // 4. Home directory for the unprivileged user
     mkdir("/home", 0755);
     mkdir("/home/bishal", 0755);
-
-    // Give user bishal (UID 1000, GID 1000) full ownership of their home directory
     chown("/home/bishal", 1000, 1000);
 
-    mount("proc", "/proc", "proc", 0, NULL);
-    mount("sysfs", "/sys", "sysfs", 0, NULL);
-    mount("devtmpfs", "/dev", "devtmpfs", 0, NULL);
-
-    // 3. Set hostname
+    // 5. Set hostname
     sethostname("BishOS", 6);
 
-    // 4. Set base environment variables
+    // 6. Set base environment variables
     setenv("PATH", "/bin:/sbin:/usr/bin:/usr/sbin", 1);
     setenv("HOME", "/root", 1);
     setenv("USER", "root", 1);
     setenv("TERM", "xterm-256color", 1);
 
-    // 5. Create default welcome note in /root and /home/bishal
-    FILE *f_root = fopen("/root/welcome.txt", "w");
-    if (f_root) {
-        fprintf(f_root, "Welcome to BishOS (Root Mode)!\n\n"
-                        "Useful commands to try:\n"
-                        "  - ping -c 3 8.8.8.8\n"
-                        "  - wget -qO- http://icanhazip.com\n"
-                        "  - su - bishal (switch to normal user)\n"
-                        "  - poweroff\n");
-        fclose(f_root);
-    }
+    // 7. Seed welcome notes (once -- see seed_file)
+    seed_file("/root/welcome.txt", 0,
+              "Welcome to BishOS (Root Mode)!\n\n"
+              "Useful commands to try:\n"
+              "  - ping -c 3 8.8.8.8\n"
+              "  - wget -qO- http://icanhazip.com\n"
+              "  - df -h /            (is this root persistent?)\n"
+              "  - su - bishal (switch to normal user)\n"
+              "  - poweroff\n");
+    seed_file("/home/bishal/welcome.txt", 1000,
+              "Welcome to BishOS, Bishal!\n\n"
+              "You are in your own home directory: /home/bishal\n"
+              "You have full read/write permissions here.\n"
+              "Try: touch myfile.txt && echo 'Hello BishOS' > myfile.txt\n");
 
-    FILE *f_user = fopen("/home/bishal/welcome.txt", "w");
-    if (f_user) {
-        fprintf(f_user, "Welcome to BishOS, Bishal!\n\n"
-                        "You are in your own home directory: /home/bishal\n"
-                        "You have full read/write permissions here.\n"
-                        "Try: touch myfile.txt && echo 'Hello BishOS' > myfile.txt\n");
-        fclose(f_user);
-        chown("/home/bishal/welcome.txt", 1000, 1000);
-    }
-
-    // 6. Bring up networking. DHCP first: QEMU's SLIRP, VMware's NAT, and real
+    // 8. Bring up networking. DHCP first: QEMU's SLIRP, VMware's NAT, and real
     // routers all run DHCP servers, so one code path serves every host. Only
     // if nothing answers (-n: give up, -t/-T: 3 tries x 2s) fall back to
     // QEMU SLIRP's fixed layout so direct-kernel boots still work offline.
@@ -114,7 +218,7 @@ int main() {
         net_mode = "static fallback (10.0.2.15)";
     }
 
-    // 7. Shutdown signals. BusyBox poweroff/halt/reboot (without -f) do not
+    // 9. Shutdown signals. BusyBox poweroff/halt/reboot (without -f) do not
     // call reboot(2) themselves -- they signal PID 1 and trust it to shut
     // down cleanly: SIGUSR2 = poweroff, SIGUSR1 = halt, SIGTERM = reboot.
     // No SA_RESTART: the signal must interrupt waitpid() with EINTR.
@@ -125,18 +229,19 @@ int main() {
     sigaction(SIGUSR1, &sa, NULL);
     sigaction(SIGUSR2, &sa, NULL);
 
-    // 8. Welcome banner
+    // 10. Welcome banner
     printf("\n");
     printf("==========================================\n");
-    printf("         Welcome to BishOS v0.3!          \n");
+    printf("         Welcome to BishOS v0.4!          \n");
     printf("     Linux Kernel + BusyBox + Network     \n");
     printf("==========================================\n");
     printf("\n");
+    printf("Storage:    %s\n", storage);
     printf("Networking: %s (DNS: 8.8.8.8)\n", net_mode);
     printf("User accounts: root, bishal (switch with: 'su - bishal')\n");
     printf("To cleanly shut down the OS, run: poweroff\n\n");
 
-    // 9. PID 1 loop: launch login shell with controlling TTY
+    // 11. PID 1 loop: launch login shell with controlling TTY
     while (1) {
         pid_t pid = fork();
 
@@ -162,8 +267,8 @@ int main() {
             }
 
             // Execute login shell (-l flag executes /etc/profile)
-            char *argv[] = {"/bin/sh", "-l", NULL};
-            execv("/bin/sh", argv);
+            char *sh_argv[] = {"/bin/sh", "-l", NULL};
+            execv("/bin/sh", sh_argv);
 
             // Fallback
             char *bb_argv[] = {"/bin/busybox", "sh", "-l", NULL};

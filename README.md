@@ -35,9 +35,20 @@ Builds for **two architectures** from the same source:
                   launches PID 1 (first process)
                               ▼
 +-------------------------------------------------------------+
-| 3. Userspace Init & Shell                                   |
-|    - Phase 1: Minimal static C init (PID 1 heartbeat)       |
-|    - Phase 2: BusyBox static tools + interactive shell (sh) |
+| 3. Early Init (initramfs stage, PID 1)                      |
+|    - Mounts /proc, /sys, /dev                               |
+|    - Finds a persistent ext4 root on vda/sda/nvme0n1        |
+|    - switch_root into it and hands over to /sbin/init       |
+|    - No disk? Keeps running from RAM instead                |
++-------------------------------------------------------------+
+                              │
+                    switch_root (MS_MOVE)
+                              ▼
++-------------------------------------------------------------+
+| 4. Real Root Filesystem (persistent ext4 disk)              |
+|    - Minimal static C init (PID 1) + BusyBox userland       |
+|    - DHCP networking, login shell, graceful shutdown        |
+|    - Files written here survive reboots                     |
 +-------------------------------------------------------------+
 ```
 
@@ -64,7 +75,7 @@ Builds for **two architectures** from the same source:
    The kernel source lives in a Docker volume; the first build compiles from
    scratch (~10-25 min), later builds are incremental.
 
-2. **Boot in QEMU**:
+2. **Boot in QEMU** (creates a 1 GB persistent ext4 disk on first run):
    ```bash
    make run              # x86_64 (software-emulated on Apple Silicon)
    make ARCH=arm64 run   # arm64 (near-native speed on Apple Silicon)
@@ -72,6 +83,12 @@ Builds for **two architectures** from the same source:
 
 3. **Exit QEMU**:
    Press `Ctrl + A`, release, then press `X`.
+
+   The disk at `build/$ARCH/bishos-disk.img` persists across boots and is
+   never overwritten by a rebuild. To wipe it and start clean:
+   ```bash
+   make ARCH=arm64 disk-reset
+   ```
 
 4. **Build a bootable ISO**:
    ```bash
@@ -111,6 +128,16 @@ Builds for **two architectures** from the same source:
   - [x] Single Makefile drives both arches (`make ARCH=arm64 ...`)
   - [x] Shared kernel source tree, per-arch out-of-tree (`O=`) build dirs
   - [x] Hardware-accelerated arm64 boot on Apple Silicon via HVF
+- [x] **Phase 7: Persistent Root Filesystem**
+  - [x] Raw ext4 disk image built with `mke2fs -d` (no loop device, no
+        privileged container)
+  - [x] `switch_root` out of the initramfs into the real root, carrying
+        `/proc`, `/sys`, `/dev` across with `MS_MOVE`
+  - [x] Graceful fallback to running from RAM when no disk is attached
+        (so the ISO and direct-kernel boots still work)
+  - [x] Read-only remount on shutdown so ext4 stays clean
+  - [ ] Package manager on top of the persistent root (apk or apt --
+        see Notes)
 - [x] **Phase 6: Real Hypervisors & Init Lifecycle**
   - [x] UEFI-bootable ISO via GRUB (`make ARCH=arm64 iso`), verified on
         QEMU + EDK2 firmware and VMware Fusion
@@ -155,6 +182,27 @@ Builds for **two architectures** from the same source:
 │       ├── Image       # Compiled Linux kernel (arm64)
 │       ├── rootfs/
 │       ├── initramfs.cpio.gz
+│       ├── bishos-disk.img  # Persistent ext4 root (survives rebuilds)
 │       └── bishos-arm64.iso
 └── README.md
 ```
+
+
+---
+
+## 📝 Notes
+
+### Why there is no `apt`
+
+BishOS builds its userland against **musl** (Alpine's toolchain), while every
+Debian `.deb` -- including `apt` and `dpkg` themselves -- is compiled against
+**glibc** and expects perl, a `/var/lib/dpkg` database, and Debian's
+filesystem layout. Running real `apt` therefore means replacing the whole
+userland with Debian's, which would make BishOS "Debian with a custom kernel
+and init" rather than a system built from parts.
+
+The natural fit for this userland is Alpine's **`apk`**: musl-native, a ~1 MB
+static binary, and it speaks to the same Alpine mirrors the build already
+uses for BusyBox. Now that the root filesystem is persistent, either option
+is finally possible -- packages installed on a RAM-only initramfs would have
+disappeared at the next reboot.

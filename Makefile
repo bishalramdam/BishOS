@@ -6,6 +6,8 @@ ARCH ?= x86_64
 BUILD_DIR = build/$(ARCH)
 ROOTFS_DIR = $(BUILD_DIR)/rootfs
 INITRAMFS = $(BUILD_DIR)/initramfs.cpio.gz
+DISK = $(BUILD_DIR)/bishos-disk.img
+DISK_SIZE = 1G
 
 # Kernel source pin -- bump both together (hash from cdn.kernel.org sha256sums.asc)
 KERNEL_VERSION = 6.18.46
@@ -32,7 +34,7 @@ CONSOLE = ttyS0
 NIC_MODEL = e1000
 endif
 
-.PHONY: all clean rootfs initramfs kernel run iso print-kernel-version
+.PHONY: all clean rootfs initramfs kernel run iso disk disk-reset print-kernel-version
 
 all: kernel rootfs initramfs
 
@@ -88,7 +90,33 @@ kernel:
 		$(KMAKE) -j\$$(nproc) $(KERNEL_IMAGE_TARGET) && \
 		mkdir -p /src/$(BUILD_DIR) && cp /kbuild/build-$(ARCH)/$(KERNEL_ARTIFACT) /src/$(KERNEL)"
 
-# 4. Build a bootable ISO: arm64 -> UEFI (GRUB, for VMware Fusion / EDK2),
+# 4. Create the persistent root filesystem: a raw ext4 disk image populated
+# from the same rootfs staging tree. mke2fs -d fills the filesystem without
+# mounting it, so this needs no loop device and no privileged container.
+# The image is only created if missing -- rebuilding must not wipe the data
+# that makes it worth having (use disk-reset for that).
+disk: rootfs
+	@if [ -f $(DISK) ]; then \
+		echo "$(DISK) exists -- keeping its data (make ARCH=$(ARCH) disk-reset to recreate)"; \
+	else \
+		echo "Creating $(DISK) ($(DISK_SIZE) ext4)"; \
+		docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/work -w /work alpine:latest sh -c "\
+			apk add --no-cache e2fsprogs e2fsprogs-extra > /dev/null && \
+			rm -rf /diskroot && cp -a /work/$(ROOTFS_DIR) /diskroot && \
+			cp /work/$(ROOTFS_DIR)/init /diskroot/sbin/init && \
+			chown -R 0:0 /diskroot && \
+			chmod 1777 /diskroot/tmp && chmod 700 /diskroot/root && \
+			truncate -s $(DISK_SIZE) /work/$(DISK) && \
+			mke2fs -t ext4 -F -L BISHOS -d /diskroot /work/$(DISK) > /dev/null && \
+			echo done"; \
+	fi
+
+# Destroy and recreate the persistent root. Wipes everything on it.
+disk-reset:
+	rm -f $(DISK)
+	$(MAKE) ARCH=$(ARCH) disk
+
+# 5. Build a bootable ISO: arm64 -> UEFI (GRUB, for VMware Fusion / EDK2),
 # x86_64 -> legacy BIOS (isolinux, El Torito + hybrid MBR so the same file
 # boots from CD and from a dd'd USB stick).
 ISO = $(BUILD_DIR)/bishos-$(ARCH).iso
@@ -117,12 +145,14 @@ else
 			iso/"
 endif
 
-# 5. Boot BishOS in QEMU with User-mode Virtual Network Card
-run: all
+# 6. Boot BishOS in QEMU: initramfs finds the virtio disk and switch_roots
+# into it, so anything written to / survives a reboot.
+run: all disk
 	$(QEMU) \
 		-kernel $(KERNEL) \
 		-initrd $(INITRAMFS) \
 		-append "console=$(CONSOLE) quiet panic=1" \
+		-drive file=$(DISK),if=virtio,format=raw \
 		-nic user,model=$(NIC_MODEL) \
 		-nographic \
 		-m 256M

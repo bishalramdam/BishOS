@@ -2,6 +2,7 @@
 build/
 *.cpio.gz
 *.iso
+*.img
 bzImage
 vmlinuz*
 
