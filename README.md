@@ -9,6 +9,7 @@ Builds for **two architectures** from the same source:
 | | x86_64 (default) | arm64 |
 | --- | --- | --- |
 | Kernel image | `bzImage` | `Image` |
+| ISO firmware | UEFI **and** legacy BIOS | UEFI |
 | QEMU machine | PC (`qemu-system-x86_64`) | `virt` (`qemu-system-aarch64`) |
 | Acceleration on Apple Silicon | none (TCG software emulation) | **HVF hardware virtualization** |
 | Serial console | `ttyS0` (16550 UART) | `ttyAMA0` (PL011 UART) |
@@ -90,10 +91,11 @@ Builds for **two architectures** from the same source:
    make ARCH=arm64 disk-reset
    ```
 
-4. **Build a bootable ISO**:
+4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
+   the same `grub.cfg`; only the kernel binary differs:
    ```bash
-   make ARCH=arm64 iso   # UEFI/GRUB  -> build/arm64/bishos-arm64.iso
-   make iso              # BIOS/isolinux -> build/x86_64/bishos-x86_64.iso
+   make ARCH=arm64 iso   # -> build/arm64/bishos-arm64.iso   (UEFI)
+   make iso              # -> build/x86_64/bishos-x86_64.iso (UEFI + BIOS)
    ```
    Prebuilt ISOs for both architectures are also attached to every
    [CI run](https://github.com/bishalramdam/BishOS/actions) and to
@@ -145,7 +147,8 @@ Builds for **two architectures** from the same source:
   - [x] Graceful shutdown: `poweroff`/`reboot`/`halt` signal PID 1
         (SIGUSR2/SIGTERM/SIGUSR1), which terminates and reaps all
         processes, syncs, and calls `reboot(2)`
-  - [x] BIOS-bootable x86_64 ISO (isolinux, hybrid MBR for CD **and** USB)
+  - [x] One GRUB config for every architecture; x86_64 ISOs carry both a
+        UEFI and a legacy-BIOS boot path
   - [x] CI builds and boot-tests both ISOs on native runners, publishes
         them on tagged releases
 
@@ -157,11 +160,10 @@ Builds for **two architectures** from the same source:
 ├── .github/workflows/
 │   └── build-iso.yml   # CI: builds + boot-tests both ISOs, publishes releases
 ├── Makefile            # Build and run automation (ARCH=x86_64 | arm64)
-├── Dockerfile.kernel   # Kernel build container (toolchains + GRUB/xorriso for ISOs)
+├── Dockerfile.kernel   # Kernel build container (native gcc + x86_64 cross-toolchain)
+├── Dockerfile.iso      # ISO packaging container (GRUB + xorriso, per-arch)
 ├── grub/
-│   └── grub.cfg        # UEFI ISO boot menu (arm64)
-├── isolinux/
-│   └── isolinux.cfg    # BIOS ISO boot menu (x86_64)
+│   └── grub.cfg        # Boot menu -- one config, every architecture
 ├── etc/                # System configuration overlay
 │   ├── passwd          # User account database (root, bishal)
 │   ├── group           # Group definitions

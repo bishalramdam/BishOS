@@ -116,34 +116,21 @@ disk-reset:
 	rm -f $(DISK)
 	$(MAKE) ARCH=$(ARCH) disk
 
-# 5. Build a bootable ISO: arm64 -> UEFI (GRUB, for VMware Fusion / EDK2),
-# x86_64 -> legacy BIOS (isolinux, El Torito + hybrid MBR so the same file
-# boots from CD and from a dd'd USB stick).
+# 5. Build a bootable ISO with GRUB -- identical layout and config on every
+# architecture; only the kernel binary differs, and it is staged under the
+# same name (/boot/vmlinuz). grub-mkrescue emits a UEFI boot path for both
+# arches, and on x86_64 additionally a legacy-BIOS one in the same image.
 ISO = $(BUILD_DIR)/bishos-$(ARCH).iso
 
 iso: all
 	rm -rf $(BUILD_DIR)/iso
-ifeq ($(ARCH),arm64)
 	mkdir -p $(BUILD_DIR)/iso/boot/grub
-	cp $(KERNEL) $(INITRAMFS) $(BUILD_DIR)/iso/boot/
+	cp $(KERNEL) $(BUILD_DIR)/iso/boot/vmlinuz
+	cp $(INITRAMFS) $(BUILD_DIR)/iso/boot/
 	cp grub/grub.cfg $(BUILD_DIR)/iso/boot/grub/
-	docker run --rm -v "$$PWD":/src bishos-kbuild bash -c \
-		"cd /src/$(BUILD_DIR) && grub-mkrescue -o bishos-arm64.iso iso/"
-else
-	mkdir -p $(BUILD_DIR)/iso/boot $(BUILD_DIR)/iso/isolinux
-	cp $(KERNEL) $(INITRAMFS) $(BUILD_DIR)/iso/boot/
-	cp isolinux/isolinux.cfg $(BUILD_DIR)/iso/isolinux/
-	docker run --rm -v "$$PWD":/src bishos-kbuild bash -c "\
-		cp /usr/lib/ISOLINUX/isolinux.bin \
-		   /usr/lib/syslinux/modules/bios/ldlinux.c32 \
-		   /src/$(BUILD_DIR)/iso/isolinux/ && \
-		cd /src/$(BUILD_DIR) && \
-		xorriso -as mkisofs -o bishos-x86_64.iso -V BISHOS \
-			-b isolinux/isolinux.bin -c isolinux/boot.cat \
-			-no-emul-boot -boot-load-size 4 -boot-info-table \
-			-isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
-			iso/"
-endif
+	docker build --platform $(DOCKER_PLATFORM) -q -f Dockerfile.iso -t bishos-iso:$(ARCH) .
+	docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/src bishos-iso:$(ARCH) \
+		sh -c "cd /src/$(BUILD_DIR) && grub-mkrescue -o bishos-$(ARCH).iso iso/"
 
 # 6. Boot BishOS in QEMU: initramfs finds the virtio disk and switch_roots
 # into it, so anything written to / survives a reboot.

@@ -2,6 +2,8 @@
 build/
 *.cpio.gz
 *.iso
+# ...but Dockerfile.iso is a build file, not a disc image
+!Dockerfile.iso
 *.img
 bzImage
 vmlinuz*

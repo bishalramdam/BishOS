@@ -18,7 +18,7 @@ jobs:
         include:
           - arch: x86_64
             runner: ubuntu-latest
-            firmware: BIOS (isolinux)
+            firmware: UEFI + BIOS (GRUB)
           - arch: arm64
             runner: ubuntu-24.04-arm
             firmware: UEFI (GRUB)
@@ -66,33 +66,61 @@ jobs:
       - name: Verify ISO is bootable
         run: |
           ls -lh build/${{ matrix.arch }}/bishos-${{ matrix.arch }}.iso
-          docker run --rm -v "$PWD":/src bishos-kbuild \
+          docker run --rm -v "$PWD":/src bishos-iso:${{ matrix.arch }} \
             xorriso -indev /src/build/${{ matrix.arch }}/bishos-${{ matrix.arch }}.iso \
                     -report_el_torito plain
 
       # Smoke-test that the ISO actually boots: the kernel must reach our
       # PID 1 and print its banner, then shut down cleanly.
+      # Smoke-test that the ISO actually boots: the kernel must reach our
+      # PID 1 and print its banner. QEMU is polled and killed as soon as the
+      # banner appears, so a healthy boot costs seconds, not the full timeout.
       - name: Boot test
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-x86 qemu-system-arm ovmf
           ARCH=${{ matrix.arch }}
+          ISO=build/$ARCH/bishos-$ARCH.iso
+
+          # Firmware lives in different packages per arch: ovmf ships x86
+          # OVMF, qemu-efi-aarch64 ships AAVMF. Installing the wrong one
+          # leaves QEMU with no -pflash to boot from.
           if [ "$ARCH" = "arm64" ]; then
-            timeout 300 qemu-system-aarch64 -machine virt -cpu max -m 512 \
-              -drive if=pflash,format=raw,readonly=on,file=/usr/share/AAVMF/AAVMF_CODE.fd \
-              -cdrom build/$ARCH/bishos-$ARCH.iso -nographic -no-reboot \
-              > boot.log 2>&1 || true
+            sudo apt-get install -y -qq qemu-system-arm qemu-efi-aarch64 > /dev/null
+            cp /usr/share/AAVMF/AAVMF_CODE.fd /tmp/fw.fd
+            cp /usr/share/AAVMF/AAVMF_VARS.fd /tmp/vars.fd
+            set -- qemu-system-aarch64 -machine virt -cpu max
           else
-            timeout 300 qemu-system-x86_64 -m 512 \
-              -cdrom build/$ARCH/bishos-$ARCH.iso -nographic -no-reboot \
-              > boot.log 2>&1 || true
+            sudo apt-get install -y -qq qemu-system-x86 ovmf > /dev/null
+            cp /usr/share/OVMF/OVMF_CODE_4M.fd /tmp/fw.fd
+            cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vars.fd
+            set -- qemu-system-x86_64
           fi
+
+          # -accel kvm -accel tcg: use hardware virtualization when the runner
+          # exposes /dev/kvm, fall back to emulation when it does not.
+          "$@" -accel kvm -accel tcg -m 512 \
+            -drive if=pflash,format=raw,readonly=on,file=/tmp/fw.fd \
+            -drive if=pflash,format=raw,file=/tmp/vars.fd \
+            -cdrom "$ISO" -nographic -no-reboot > boot.log 2>&1 &
+          QEMU_PID=$!
+
+          for _ in $(seq 1 120); do
+            grep -aqE "Welcome to BishOS|Kernel panic" boot.log && break
+            kill -0 "$QEMU_PID" 2>/dev/null || break
+            sleep 2
+          done
+          kill "$QEMU_PID" 2>/dev/null || true
+          wait "$QEMU_PID" 2>/dev/null || true
+
           echo "--- boot log tail ---"
           tail -40 boot.log
-          grep -aq "Welcome to BishOS" boot.log \
-            || { echo "::error::ISO did not reach the BishOS banner"; exit 1; }
-          grep -aq "Kernel panic" boot.log \
-            && { echo "::error::kernel panic during boot"; exit 1; }
+          if grep -aq "Kernel panic" boot.log; then
+            echo "::error::kernel panic during boot"; exit 1
+          fi
+          if ! grep -aq "Welcome to BishOS" boot.log; then
+            echo "::error::ISO did not reach the BishOS banner"; exit 1
+          fi
           echo "Boot test passed."
 
       - uses: actions/upload-artifact@v4

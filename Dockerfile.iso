@@ -1,0 +1,21 @@
+# ISO packaging environment for BishOS.
+# Build it for the target's platform (--platform linux/amd64 or linux/arm64):
+# GRUB's boot images are architecture-specific and Debian only ships each
+# arch's images in that arch's repository, so an arm64 container genuinely
+# cannot produce an x86 boot image.
+FROM debian:trixie-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        grub-common \
+        xorriso \
+        mtools \
+    && case "$(dpkg --print-architecture)" in \
+         amd64) apt-get install -y --no-install-recommends \
+                    grub-efi-amd64-bin grub-pc-bin ;; \
+         arm64) apt-get install -y --no-install-recommends \
+                    grub-efi-arm64-bin ;; \
+         *) echo "unsupported build arch" >&2; exit 1 ;; \
+       esac \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
