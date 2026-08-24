@@ -1,0 +1,27 @@
+# Kernel build environment for BishOS.
+# Native arm64 container + x86_64 cross-toolchain: builds the x86_64 kernel
+# at full speed on Apple Silicon instead of emulating an amd64 container.
+FROM debian:trixie-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        g++ \
+        libc6-dev \
+        gcc-x86-64-linux-gnu \
+        binutils-x86-64-linux-gnu \
+        make \
+        bc \
+        bison \
+        flex \
+        libssl-dev \
+        libelf-dev \
+        libncurses-dev \
+        xz-utils \
+        curl \
+        ca-certificates \
+        python3 \
+        kmod \
+        cpio \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /kbuild

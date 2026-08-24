@@ -58,22 +58,13 @@ int main() {
         chown("/home/bishal/welcome.txt", 1000, 1000);
     }
 
-    // 6. Load network driver and poll /sys/class/net until the kernel finishes PCIe registration
-    system("insmod /lib/modules/e1000.ko 2>/dev/null || true");
-
-    for (int i = 0; i < 30; i++) {
-        if (access("/sys/class/net/eth0", F_OK) == 0) {
-            break;
-        }
-        usleep(100000); // 100ms
-    }
-
-    // 7. Configure network interfaces & default gateway
+    // 6. Configure network interfaces & default gateway (e1000 is built into the kernel,
+    // so eth0 already exists by the time PID 1 runs -- no module loading needed)
     system("ifconfig lo 127.0.0.1 up");
     system("ifconfig eth0 10.0.2.15 netmask 255.255.255.0 broadcast 10.0.2.255 up 2>/dev/null || true");
     system("route add default gw 10.0.2.2 dev eth0 2>/dev/null || true");
 
-    // 8. Welcome banner
+    // 7. Welcome banner
     printf("\n");
     printf("==========================================\n");
     printf("         Welcome to BishOS v0.2!          \n");
@@ -84,7 +75,7 @@ int main() {
     printf("User accounts: root, bishal (switch with: 'su - bishal')\n");
     printf("To cleanly shut down the OS, run: poweroff\n\n");
 
-    // 9. PID 1 loop: launch login shell with controlling TTY
+    // 8. PID 1 loop: launch login shell with controlling TTY
     while (1) {
         pid_t pid = fork();
 
