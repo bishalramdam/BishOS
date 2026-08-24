@@ -72,9 +72,11 @@ A minimal Linux operating system built modularly like **Lego blocks**: combining
 - [ ] **Phase 3: Kernel Compilation from Source**
   - [ ] Download mainline kernel source (`kernel.org`)
   - [ ] Custom minimal `defconfig`
-- [ ] **Phase 4: Networking & Advanced Features**
-  - [ ] DHCP networking via `udhcpc`
-  - [ ] Bootable ISO / disk image generation
+- [x] **Phase 4: Networking & Internet Connectivity**
+  - [x] Intel e1000 standalone network driver integration
+  - [x] Auto-configuration of `eth0` and default gateway
+  - [x] Google DNS resolution (`8.8.8.8`, `8.8.4.4`)
+  - [x] Live Internet connectivity, ICMP ping, and HTTP web fetching
 
 ---
 
@@ -87,9 +89,12 @@ A minimal Linux operating system built modularly like **Lego blocks**: combining
 │   ├── group           # Group definitions
 │   ├── hostname        # System hostname (BishOS)
 │   ├── hosts           # Local loopback resolution
-│   └── profile         # Login shell environment, aliases, colors
+│   ├── profile         # Login shell environment, aliases, colors
+│   ├── resolv.conf     # Google DNS configuration (8.8.8.8)
+│   └── udhcpc/
+│       └── default.script # DHCP event handler
 ├── src/
-│   └── init.c          # Minimal C init (PID 1)
+│   └── init.c          # Minimal C init (PID 1 + network auto-bringup)
 ├── build/              # Generated build artifacts (gitignored)
 │   ├── bzImage         # Linux kernel binary
 │   ├── rootfs/         # Root filesystem staging area

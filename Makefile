@@ -5,9 +5,9 @@ KERNEL = $(BUILD_DIR)/bzImage
 
 .PHONY: all clean rootfs initramfs kernel run
 
-all: rootfs initramfs kernel
+all: rootfs initramfs
 
-# 1. Compile C init (PID 1) and install BusyBox + symlinks + user profiles (/etc)
+# 1. Compile C init (PID 1) and install BusyBox + symlinks + user profiles + ONLY standalone e1000 network driver
 rootfs:
 	mkdir -p $(BUILD_DIR)
 	docker run --rm --platform linux/amd64 -v "$$PWD":/work -w /work alpine:latest sh -c "\
@@ -17,7 +17,8 @@ rootfs:
 		         /work/$(ROOTFS_DIR)/proc /work/$(ROOTFS_DIR)/sys \
 		         /work/$(ROOTFS_DIR)/dev /work/$(ROOTFS_DIR)/root \
 		         /work/$(ROOTFS_DIR)/home/bishal /work/$(ROOTFS_DIR)/tmp \
-		         /work/$(ROOTFS_DIR)/etc && \
+		         /work/$(ROOTFS_DIR)/etc /work/$(ROOTFS_DIR)/usr/share/udhcpc \
+		         /work/$(ROOTFS_DIR)/lib/modules && \
 		gcc -static -O2 /work/src/init.c -o /work/$(ROOTFS_DIR)/init && \
 		cp /bin/busybox.static /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod +x /work/$(ROOTFS_DIR)/bin/busybox && \
@@ -26,31 +27,31 @@ rootfs:
 		cd /work/$(ROOTFS_DIR)/sbin && \
 		for app in \$$(../bin/busybox --list); do ln -sf /bin/busybox \$$app; done && \
 		cp -r /work/etc/* /work/$(ROOTFS_DIR)/etc/ && \
-		chmod 644 /work/$(ROOTFS_DIR)/etc/* && \
-		chmod 755 /work/$(ROOTFS_DIR)/etc/profile"
+		cp /work/etc/udhcpc/default.script /work/$(ROOTFS_DIR)/usr/share/udhcpc/default.script && \
+		mkdir -p /tmp/k && cd /tmp/k && \
+		apk fetch --no-cache linux-lts && \
+		tar -xzf linux-lts-*.apk && \
+		cp boot/vmlinuz-lts /work/$(KERNEL) && \
+		E1000=\$$(find lib/modules -name 'e1000.ko.gz' | head -n 1) && \
+		gzip -dc \"\$$E1000\" > /work/$(ROOTFS_DIR)/lib/modules/e1000.ko && \
+		chmod -R 755 /work/$(ROOTFS_DIR)"
 
 # 2. Package rootfs into initramfs.cpio.gz
 initramfs:
 	mkdir -p $(BUILD_DIR)
 	(cd $(ROOTFS_DIR) && find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../initramfs.cpio.gz)
 
-# 3. Fetch Linux LTS kernel image (if not already downloaded)
+# 3. Kernel alias (already built by rootfs)
 kernel:
-	mkdir -p $(BUILD_DIR)
-	docker run --rm --platform linux/amd64 -v "$$PWD":/work -w /work alpine:latest sh -c "\
-		if [ ! -f /work/$(KERNEL) ]; then \
-			mkdir -p /tmp/k && cd /tmp/k && \
-			apk fetch --no-cache linux-lts && \
-			tar -xzf linux-lts-*.apk && \
-			cp boot/vmlinuz-lts /work/$(KERNEL); \
-		fi"
+	@test -f $(KERNEL) || $(MAKE) rootfs
 
-# 4. Boot BishOS in QEMU
+# 4. Boot BishOS in QEMU with User-mode Virtual Network Card
 run:
 	qemu-system-x86_64 \
 		-kernel $(KERNEL) \
 		-initrd $(INITRAMFS) \
 		-append "console=ttyS0 quiet panic=1" \
+		-nic user,model=e1000 \
 		-nographic \
 		-m 256M
 

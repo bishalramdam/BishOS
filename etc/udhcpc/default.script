@@ -1,0 +1,28 @@
+#!/bin/sh
+# Standard BusyBox udhcpc script for BishOS
+
+[ -z "$1" ] && exit 1
+
+[ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
+[ -n "$subnet" ] && NETMASK="netmask $subnet"
+
+case "$1" in
+    deconfig)
+        ifconfig "$interface" 0.0.0.0
+        ;;
+    renew|bound)
+        ifconfig "$interface" "$ip" $NETMASK $BROADCAST
+        if [ -n "$router" ]; then
+            while route del default gw 0.0.0.0 dev "$interface" 2>/dev/null; do
+                :
+            done
+            for r in $router; do
+                route add default gw "$r" dev "$interface"
+            done
+        fi
+        echo "nameserver 8.8.8.8" > /etc/resolv.conf
+        echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+        ;;
+esac
+
+exit 0

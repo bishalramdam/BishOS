@@ -32,17 +32,33 @@ int main() {
     setenv("USER", "root", 1);
     setenv("TERM", "linux", 1);
 
-    // 5. Welcome banner
+    // 5. Load network driver and poll /sys/class/net until the kernel finishes PCIe registration
+    system("insmod /lib/modules/e1000.ko 2>/dev/null || true");
+
+    for (int i = 0; i < 30; i++) {
+        if (access("/sys/class/net/eth0", F_OK) == 0) {
+            break;
+        }
+        usleep(100000); // 100ms
+    }
+
+    // 6. Configure network interfaces & default gateway
+    system("ifconfig lo 127.0.0.1 up");
+    system("ifconfig eth0 10.0.2.15 netmask 255.255.255.0 broadcast 10.0.2.255 up 2>/dev/null || true");
+    system("route add default gw 10.0.2.2 dev eth0 2>/dev/null || true");
+
+    // 7. Welcome banner
     printf("\n");
     printf("==========================================\n");
     printf("         Welcome to BishOS v0.2!          \n");
-    printf("     Linux Kernel + BusyBox Userspace     \n");
+    printf("     Linux Kernel + BusyBox + Network     \n");
     printf("==========================================\n");
     printf("\n");
-    printf("Type 'whoami', 'id', 'll', or 'su - bishal'\n");
+    printf("Networking: Online (Intel e1000 + Google DNS: 8.8.8.8)\n");
+    printf("Try: 'ping -c 3 8.8.8.8', 'nslookup google.com', 'wget -qO- http://icanhazip.com'\n");
     printf("To cleanly shut down the OS, run: poweroff\n\n");
 
-    // 6. PID 1 loop: launch login shell with controlling TTY
+    // 8. PID 1 loop: launch login shell with controlling TTY
     while (1) {
         pid_t pid = fork();
 
