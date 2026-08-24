@@ -15,7 +15,7 @@ BUILD_DIR = build/$(ARCH)
 ROOTFS_DIR = $(BUILD_DIR)/rootfs
 INITRAMFS = $(BUILD_DIR)/initramfs.cpio.gz
 DISK = $(BUILD_DIR)/bishos-disk.img
-DISK_SIZE = 1G
+DISK_SIZE = 5G
 
 # Kernel source pin -- bump both together (hash from cdn.kernel.org sha256sums.asc)
 KERNEL_VERSION = 6.18.46
@@ -42,7 +42,7 @@ CONSOLE = ttyS0
 NIC_MODEL = e1000
 endif
 
-.PHONY: all clean rootfs initramfs kernel run iso disk disk-reset print-kernel-version print-version
+.PHONY: all clean rootfs initramfs kernel run iso disk disk-reset disk-grow print-kernel-version print-version
 
 all: kernel rootfs initramfs
 
@@ -138,6 +138,19 @@ disk: rootfs
 			mke2fs -t ext4 -F -L BISHOS -d /diskroot /work/$(DISK) > /dev/null && \
 			echo done"; \
 	fi
+
+# Grow an existing persistent root to DISK_SIZE, keeping everything on it.
+# This works in place because the image is a whole-disk ext4 filesystem with
+# no partition table: there is no partition to move before resizing. The
+# image is sparse, so a bigger DISK_SIZE costs host disk only as it fills.
+disk-grow:
+	@test -f $(DISK) || { echo "$(DISK) does not exist -- run: make ARCH=$(ARCH) disk"; exit 1; }
+	docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/work -w /work alpine:latest sh -c "\
+		apk add --no-cache e2fsprogs e2fsprogs-extra > /dev/null && \
+		truncate -s $(DISK_SIZE) /work/$(DISK) && \
+		e2fsck -fp /work/$(DISK) || true; \
+		resize2fs /work/$(DISK)"
+	@echo "$(DISK) grown to $(DISK_SIZE)"
 
 # Destroy and recreate the persistent root. Wipes everything on it.
 disk-reset:

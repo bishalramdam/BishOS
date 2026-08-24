@@ -86,10 +86,15 @@ Builds for **two architectures** from the same source:
    Press `Ctrl + A`, release, then press `X`.
 
    The disk at `build/$ARCH/bishos-disk.img` persists across boots and is
-   never overwritten by a rebuild. To wipe it and start clean:
+   never overwritten by a rebuild. It defaults to 5 GB and is sparse, so it
+   costs host disk only as it fills.
    ```bash
-   make ARCH=arm64 disk-reset
+   make ARCH=arm64 disk-grow                 # bigger, keeping your data
+   make ARCH=arm64 DISK_SIZE=20G disk-grow   # any size you like
+   make ARCH=arm64 disk-reset                # wipe and start clean
    ```
+   Growing works in place because the image is a whole-disk ext4 filesystem
+   with no partition table -- there is no partition to move before resizing.
 
 4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
    the same `grub.cfg`; only the kernel binary differs:
