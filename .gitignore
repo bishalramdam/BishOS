@@ -1,0 +1,14 @@
+# Build artifacts
+build/
+*.cpio.gz
+*.iso
+bzImage
+vmlinuz*
+
+# macOS files
+.DS_Store
+
+# IDE configuration
+.idea/
+.vscode/
+cmake-build-*/
