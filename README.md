@@ -71,6 +71,15 @@ Builds for **two architectures** from the same source:
 3. **Exit QEMU**:
    Press `Ctrl + A`, release, then press `X`.
 
+4. **Build a UEFI-bootable ISO** (arm64) for VMware Fusion or any UEFI
+   arm64 hypervisor:
+   ```bash
+   make ARCH=arm64 iso   # -> build/arm64/bishos-arm64.iso
+   ```
+   In VMware Fusion: New VM -> drag the ISO in -> "Other Linux 6.x 64-bit Arm".
+   The same shell lands on the serial port in QEMU and on the screen in
+   VMware -- the kernel gives /dev/console to the last console= that exists.
+
 ---
 
 ## 🗺️ Roadmap & Progress
@@ -97,6 +106,14 @@ Builds for **two architectures** from the same source:
   - [x] Single Makefile drives both arches (`make ARCH=arm64 ...`)
   - [x] Shared kernel source tree, per-arch out-of-tree (`O=`) build dirs
   - [x] Hardware-accelerated arm64 boot on Apple Silicon via HVF
+- [x] **Phase 6: Real Hypervisors & Init Lifecycle**
+  - [x] UEFI-bootable ISO via GRUB (`make ARCH=arm64 iso`), verified on
+        QEMU + EDK2 firmware and VMware Fusion
+  - [x] DHCP auto-configuration (udhcpc) with static QEMU fallback
+  - [x] Graceful shutdown: `poweroff`/`reboot`/`halt` signal PID 1
+        (SIGUSR2/SIGTERM/SIGUSR1), which terminates and reaps all
+        processes, syncs, and calls `reboot(2)`
+  - [ ] BIOS-bootable x86_64 ISO (isolinux config staged in `isolinux/`)
 
 ---
 
@@ -104,7 +121,11 @@ Builds for **two architectures** from the same source:
 
 ```
 ├── Makefile            # Build and run automation (ARCH=x86_64 | arm64)
-├── Dockerfile.kernel   # Kernel build container (native gcc + x86_64 cross-toolchain)
+├── Dockerfile.kernel   # Kernel build container (toolchains + GRUB/xorriso for ISOs)
+├── grub/
+│   └── grub.cfg        # UEFI ISO boot menu (arm64)
+├── isolinux/
+│   └── isolinux.cfg    # BIOS ISO boot menu (x86_64, not wired up yet)
 ├── etc/                # System configuration overlay
 │   ├── passwd          # User account database (root, bishal)
 │   ├── group           # Group definitions
@@ -124,6 +145,7 @@ Builds for **two architectures** from the same source:
 │   └── arm64/
 │       ├── Image       # Compiled Linux kernel (arm64)
 │       ├── rootfs/
-│       └── initramfs.cpio.gz
+│       ├── initramfs.cpio.gz
+│       └── bishos-arm64.iso
 └── README.md
 ```

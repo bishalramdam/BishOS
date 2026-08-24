@@ -30,7 +30,7 @@ CONSOLE = ttyS0
 NIC_MODEL = e1000
 endif
 
-.PHONY: all clean rootfs initramfs kernel run
+.PHONY: all clean rootfs initramfs kernel run iso
 
 all: kernel rootfs initramfs
 
@@ -86,7 +86,21 @@ kernel:
 		$(KMAKE) -j\$$(nproc) && \
 		mkdir -p /src/$(BUILD_DIR) && cp /kbuild/build-$(ARCH)/$(KERNEL_ARTIFACT) /src/$(KERNEL)"
 
-# 4. Boot BishOS in QEMU with User-mode Virtual Network Card
+# 4. Build a UEFI-bootable ISO (arm64 only for now; x86_64 needs the BIOS/
+# isolinux path, staged in isolinux/ but not wired up yet). Boots QEMU with
+# EDK2 firmware, VMware Fusion, and other UEFI arm64 hypervisors.
+iso: all
+	@if [ "$(ARCH)" != "arm64" ]; then \
+		echo "The ISO target is arm64-only for now: make ARCH=arm64 iso"; exit 1; fi
+	rm -rf $(BUILD_DIR)/iso
+	mkdir -p $(BUILD_DIR)/iso/boot/grub
+	cp $(KERNEL) $(BUILD_DIR)/iso/boot/
+	cp $(INITRAMFS) $(BUILD_DIR)/iso/boot/
+	cp grub/grub.cfg $(BUILD_DIR)/iso/boot/grub/
+	docker run --rm -v "$$PWD":/src bishos-kbuild bash -c \
+		"cd /src/$(BUILD_DIR) && grub-mkrescue -o bishos-arm64.iso iso/"
+
+# 5. Boot BishOS in QEMU with User-mode Virtual Network Card
 run: all
 	$(QEMU) \
 		-kernel $(KERNEL) \

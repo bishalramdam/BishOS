@@ -1,13 +1,53 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/mount.h>
+#include <sys/reboot.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <errno.h>
+
+// Set by the shutdown signal handler; checked by the PID 1 reap loop.
+static volatile sig_atomic_t shutdown_signal = 0;
+
+static void handle_shutdown(int sig) {
+    shutdown_signal = sig;
+}
+
+// Graceful shutdown: terminate everything, reap it, sync, then ask the
+// kernel to power off / halt / reboot. Never returns.
+static void do_shutdown(int sig) {
+    const char *what = (sig == SIGTERM) ? "Rebooting"
+                     : (sig == SIGUSR1) ? "Halting"
+                                        : "Powering off";
+    printf("\n[BishOS] %s: terminating all processes...\n", what);
+
+    kill(-1, SIGTERM);   // from PID 1 this signals everyone except us
+    sleep(2);            // grace period for clean exits
+    kill(-1, SIGKILL);
+    while (waitpid(-1, NULL, WNOHANG) > 0)
+        ;                // bury whatever is left
+
+    sync();
+    printf("[BishOS] Bye!\n");
+
+    if (sig == SIGTERM) {
+        reboot(RB_AUTOBOOT);
+    } else if (sig == SIGUSR1) {
+        reboot(RB_HALT_SYSTEM);
+    } else {
+        reboot(RB_POWER_OFF);
+    }
+    perror("[BishOS] reboot() failed");  // reboot(2) only returns on error
+    while (1) {
+        sleep(60);       // PID 1 must never exit, even here
+    }
+}
 
 int main() {
     // 1. Disable stdout buffering for immediate serial console output
@@ -58,24 +98,45 @@ int main() {
         chown("/home/bishal/welcome.txt", 1000, 1000);
     }
 
-    // 6. Configure network interfaces & default gateway (e1000 is built into the kernel,
-    // so eth0 already exists by the time PID 1 runs -- no module loading needed)
+    // 6. Bring up networking. DHCP first: QEMU's SLIRP, VMware's NAT, and real
+    // routers all run DHCP servers, so one code path serves every host. Only
+    // if nothing answers (-n: give up, -t/-T: 3 tries x 2s) fall back to
+    // QEMU SLIRP's fixed layout so direct-kernel boots still work offline.
+    const char *net_mode;
     system("ifconfig lo 127.0.0.1 up");
-    system("ifconfig eth0 10.0.2.15 netmask 255.255.255.0 broadcast 10.0.2.255 up 2>/dev/null || true");
-    system("route add default gw 10.0.2.2 dev eth0 2>/dev/null || true");
+    system("ifconfig eth0 up 2>/dev/null");
+    if (system("udhcpc -i eth0 -s /usr/share/udhcpc/default.script "
+               "-n -q -t 3 -T 2 >/dev/null 2>&1") == 0) {
+        net_mode = "DHCP";
+    } else {
+        system("ifconfig eth0 10.0.2.15 netmask 255.255.255.0 broadcast 10.0.2.255 up 2>/dev/null || true");
+        system("route add default gw 10.0.2.2 dev eth0 2>/dev/null || true");
+        net_mode = "static fallback (10.0.2.15)";
+    }
 
-    // 7. Welcome banner
+    // 7. Shutdown signals. BusyBox poweroff/halt/reboot (without -f) do not
+    // call reboot(2) themselves -- they signal PID 1 and trust it to shut
+    // down cleanly: SIGUSR2 = poweroff, SIGUSR1 = halt, SIGTERM = reboot.
+    // No SA_RESTART: the signal must interrupt waitpid() with EINTR.
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_shutdown;
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGUSR2, &sa, NULL);
+
+    // 8. Welcome banner
     printf("\n");
     printf("==========================================\n");
-    printf("         Welcome to BishOS v0.2!          \n");
+    printf("         Welcome to BishOS v0.3!          \n");
     printf("     Linux Kernel + BusyBox + Network     \n");
     printf("==========================================\n");
     printf("\n");
-    printf("Networking: Online (DNS: 8.8.8.8)\n");
+    printf("Networking: %s (DNS: 8.8.8.8)\n", net_mode);
     printf("User accounts: root, bishal (switch with: 'su - bishal')\n");
     printf("To cleanly shut down the OS, run: poweroff\n\n");
 
-    // 8. PID 1 loop: launch login shell with controlling TTY
+    // 9. PID 1 loop: launch login shell with controlling TTY
     while (1) {
         pid_t pid = fork();
 
@@ -115,6 +176,10 @@ int main() {
             // Only the death of our own shell breaks out to respawn it.
             int status;
             while (1) {
+                if (shutdown_signal) {
+                    do_shutdown(shutdown_signal);
+                }
+
                 pid_t dead = waitpid(-1, &status, 0);
 
                 if (dead == pid) {
@@ -123,7 +188,7 @@ int main() {
 
                 if (dead < 0) {
                     if (errno == EINTR) {
-                        continue; // interrupted by a signal: keep reaping
+                        continue; // signal arrived: loop re-checks shutdown_signal
                     }
                     break; // ECHILD or unexpected error: nothing left to reap
                 }

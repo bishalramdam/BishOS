@@ -34,8 +34,6 @@ alias df='df -h'
 alias free='free -m'
 alias clear='printf "\033c"'
 alias cls='printf "\033c"'
-alias poweroff='poweroff -f'
-alias reboot='reboot -f'
 
 # Switch into HOME directory on login
 cd "$HOME" 2>/dev/null || cd /
