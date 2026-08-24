@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <termios.h>
+#include <errno.h>
 
 int main() {
     // 1. Disable stdout buffering for immediate serial console output
@@ -91,10 +92,11 @@ int main() {
             // Create a new process session
             setsid();
 
-            // Attach /dev/ttyS0 as the controlling terminal (TIOCSCTTY)
-            int fd = open("/dev/ttyS0", O_RDWR);
+            // Attach the kernel's console as the controlling terminal (TIOCSCTTY).
+            // /dev/console follows the console= cmdline, so one image serves serial and VGA.
+            int fd = open("/dev/console", O_RDWR);
             if (fd < 0) {
-                fd = open("/dev/console", O_RDWR);
+                fd = open("/dev/ttyS0", O_RDWR);
             }
 
             if (fd >= 0) {
@@ -118,9 +120,25 @@ int main() {
             perror("[BishOS] Failed to execute shell");
             exit(1);
         } else if (pid > 0) {
-            // Parent (PID 1): wait for the shell session to exit
+            // Parent (PID 1): reap EVERY child, since orphans are re-parented to us.
+            // Only the death of our own shell breaks out to respawn it.
             int status;
-            waitpid(pid, &status, 0);
+            while (1) {
+                pid_t dead = waitpid(-1, &status, 0);
+
+                if (dead == pid) {
+                    break; // our login shell exited: respawn it
+                }
+
+                if (dead < 0) {
+                    if (errno == EINTR) {
+                        continue; // interrupted by a signal: keep reaping
+                    }
+                    break; // ECHILD or unexpected error: nothing left to reap
+                }
+
+                // Any other pid was an orphan we just buried: keep waiting
+            }
             printf("\n[BishOS] Shell session ended. Respawning shell...\n\n");
         } else {
             perror("[BishOS] fork failed");

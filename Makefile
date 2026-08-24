@@ -34,12 +34,18 @@ rootfs:
 		cp boot/vmlinuz-lts /work/$(KERNEL) && \
 		E1000=\$$(find lib/modules -name 'e1000.ko.gz' | head -n 1) && \
 		gzip -dc \"\$$E1000\" > /work/$(ROOTFS_DIR)/lib/modules/e1000.ko && \
-		chmod -R 755 /work/$(ROOTFS_DIR)"
+		find /work/$(ROOTFS_DIR) -type d -exec chmod 755 {} + && \
+		find /work/$(ROOTFS_DIR)/etc -type f -exec chmod 644 {} + && \
+		chmod 755 /work/$(ROOTFS_DIR)/etc/udhcpc/default.script /work/$(ROOTFS_DIR)/usr/share/udhcpc/default.script && \
+		chmod 755 /work/$(ROOTFS_DIR)/init /work/$(ROOTFS_DIR)/bin/busybox && \
+		chmod 644 /work/$(ROOTFS_DIR)/lib/modules/e1000.ko && \
+		chmod 700 /work/$(ROOTFS_DIR)/root && \
+		chmod 1777 /work/$(ROOTFS_DIR)/tmp"
 
 # 2. Package rootfs into initramfs.cpio.gz
 initramfs:
 	mkdir -p $(BUILD_DIR)
-	(cd $(ROOTFS_DIR) && find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../initramfs.cpio.gz)
+	(cd $(ROOTFS_DIR) && find . -print0 | cpio --null -ov --format=newc -R 0:0 | gzip -9 > ../initramfs.cpio.gz)
 
 # 3. Kernel alias (already built by rootfs)
 kernel:
