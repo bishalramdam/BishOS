@@ -18,6 +18,8 @@ Ordered by how much it changes what the OS *is*, not by effort.
 - `apk` package manager with signature verification and a CA bundle
 - GRUB ISOs for both arches (UEFI, plus legacy BIOS on x86_64)
 - CI builds, boot-tests, and publishes both ISOs on tags
+- Pseudo-terminals: `devpts` mounted at `/dev/pts` (plus `/dev/shm`), so ssh,
+  tmux and screen have ptys to allocate
 
 ---
 
@@ -46,18 +48,15 @@ nothing launches it.
 This is the biggest architectural gap and the most interesting thing left:
 writing it *is* writing the thing systemd exists to be.
 
-### 1.3 No `/dev/pts`
-Init mounts `proc`, `sysfs`, and `devtmpfs` but not `devpts`, so there are no
-pseudo-terminals. This silently blocks ssh, `tmux`, `screen`, and anything
-that allocates a pty. One `mount()` call -- but it gates 2.1.
-
 ---
 
 ## 2. Robustness
 
 ### 2.1 No remote access
-Console only. Needs 1.3 first, then `apk add openssh`, host keys, and a way
-to start `sshd` at boot (1.2).
+Console only. `/dev/pts` now exists, so the remaining work is
+`apk add openssh`, generating host keys, and a way to start `sshd` at boot
+(1.2). Passwords (1.1) matter here too -- sshd will refuse to let root in
+without one.
 
 ### 2.2 Nothing ever runs fsck
 Clean shutdown remounts read-only, which is right, but a power loss or a
@@ -105,11 +104,11 @@ certificate errors that look like a CA problem but are not.
 
 ## Suggested order
 
-**1.3 → 1.2 → 1.1 → 2.1.**
+**1.2 → 1.1 → 2.1.** (`/dev/pts` is done.)
 
-`/dev/pts`, then a minimal service table, then passwords, then sshd. That
-sequence turns BishOS from "an OS I boot and type into" into "a machine I can
-log into that runs things", and each step is an evening's work.
+A minimal service table, then passwords, then sshd. That sequence turns
+BishOS from "an OS I boot and type into" into "a machine I can log into that
+runs things", and each step is an evening's work.
 
 Worth remembering: this is a learning project, and it is allowed to be
 finished. v0.4.0 boots on real hardware and installs Python. Everything above

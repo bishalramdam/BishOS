@@ -181,6 +181,23 @@ int main(int argc, char **argv) {
         mount("tmpfs", "/tmp", "tmpfs", 0, "mode=1777");
     }
 
+    // 3a. Pseudo-terminals. Mounted here, after the switch_root decision, so
+    // it happens exactly once on either path. Without devpts nothing can
+    // allocate a pty, which silently breaks ssh, tmux, screen and script.
+    // mode=0620,gid=5 is the usual owner/permission pair for a pty (group
+    // "tty"); ptmxmode makes /dev/pts/ptmx usable by non-root.
+    mkdir("/dev/pts", 0755);
+    if (mount("devpts", "/dev/pts", "devpts", 0,
+              "mode=0620,gid=5,ptmxmode=0666") != 0) {
+        printf("[BishOS] warning: no /dev/pts (%s) -- ssh and tmux will not work\n",
+               strerror(errno));
+    }
+
+    // POSIX shared memory. Python's multiprocessing and many servers expect
+    // it, and its absence surfaces as a confusing unrelated error.
+    mkdir("/dev/shm", 01777);
+    mount("tmpfs", "/dev/shm", "tmpfs", 0, "mode=1777");
+
     // 4. Home directory for the unprivileged user
     mkdir("/home", 0755);
     mkdir("/home/bishal", 0755);
