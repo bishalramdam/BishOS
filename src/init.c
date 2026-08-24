@@ -19,6 +19,9 @@ int main() {
     mkdir("/home", 0755);
     mkdir("/home/bishal", 0755);
 
+    // Give user bishal (UID 1000, GID 1000) full ownership of their home directory
+    chown("/home/bishal", 1000, 1000);
+
     mount("proc", "/proc", "proc", 0, NULL);
     mount("sysfs", "/sys", "sysfs", 0, NULL);
     mount("devtmpfs", "/dev", "devtmpfs", 0, NULL);
@@ -30,9 +33,31 @@ int main() {
     setenv("PATH", "/bin:/sbin:/usr/bin:/usr/sbin", 1);
     setenv("HOME", "/root", 1);
     setenv("USER", "root", 1);
-    setenv("TERM", "linux", 1);
+    setenv("TERM", "xterm-256color", 1);
 
-    // 5. Load network driver and poll /sys/class/net until the kernel finishes PCIe registration
+    // 5. Create default welcome note in /root and /home/bishal
+    FILE *f_root = fopen("/root/welcome.txt", "w");
+    if (f_root) {
+        fprintf(f_root, "Welcome to BishOS (Root Mode)!\n\n"
+                        "Useful commands to try:\n"
+                        "  - ping -c 3 8.8.8.8\n"
+                        "  - wget -qO- http://icanhazip.com\n"
+                        "  - su - bishal (switch to normal user)\n"
+                        "  - poweroff\n");
+        fclose(f_root);
+    }
+
+    FILE *f_user = fopen("/home/bishal/welcome.txt", "w");
+    if (f_user) {
+        fprintf(f_user, "Welcome to BishOS, Bishal!\n\n"
+                        "You are in your own home directory: /home/bishal\n"
+                        "You have full read/write permissions here.\n"
+                        "Try: touch myfile.txt && echo 'Hello BishOS' > myfile.txt\n");
+        fclose(f_user);
+        chown("/home/bishal/welcome.txt", 1000, 1000);
+    }
+
+    // 6. Load network driver and poll /sys/class/net until the kernel finishes PCIe registration
     system("insmod /lib/modules/e1000.ko 2>/dev/null || true");
 
     for (int i = 0; i < 30; i++) {
@@ -42,12 +67,12 @@ int main() {
         usleep(100000); // 100ms
     }
 
-    // 6. Configure network interfaces & default gateway
+    // 7. Configure network interfaces & default gateway
     system("ifconfig lo 127.0.0.1 up");
     system("ifconfig eth0 10.0.2.15 netmask 255.255.255.0 broadcast 10.0.2.255 up 2>/dev/null || true");
     system("route add default gw 10.0.2.2 dev eth0 2>/dev/null || true");
 
-    // 7. Welcome banner
+    // 8. Welcome banner
     printf("\n");
     printf("==========================================\n");
     printf("         Welcome to BishOS v0.2!          \n");
@@ -55,10 +80,10 @@ int main() {
     printf("==========================================\n");
     printf("\n");
     printf("Networking: Online (Intel e1000 + Google DNS: 8.8.8.8)\n");
-    printf("Try: 'ping -c 3 8.8.8.8', 'nslookup google.com', 'wget -qO- http://icanhazip.com'\n");
+    printf("User accounts: root, bishal (switch with: 'su - bishal')\n");
     printf("To cleanly shut down the OS, run: poweroff\n\n");
 
-    // 8. PID 1 loop: launch login shell with controlling TTY
+    // 9. PID 1 loop: launch login shell with controlling TTY
     while (1) {
         pid_t pid = fork();
 

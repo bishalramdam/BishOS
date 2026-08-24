@@ -1,7 +1,7 @@
 # /etc/profile: System-wide environment configuration for BishOS
 
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
-export TERM=linux
+export TERM=xterm-256color
 export PAGER=less
 export EDITOR=vi
 
@@ -9,7 +9,7 @@ export EDITOR=vi
 CURRENT_USER=$(id -un 2>/dev/null || echo "root")
 export USER=$CURRENT_USER
 
-# Set home directory if not set
+# Set home directory
 if [ "$USER" = "root" ]; then
     export HOME=/root
 else
@@ -25,13 +25,15 @@ else
     export PS1='\[\033[01;36m\]\u@BishOS\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$ '
 fi
 
-# Common shell aliases
+# Useful shell aliases
 alias ls='ls --color=auto'
 alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias df='df -h'
 alias free='free -m'
+alias clear='printf "\033c"'
+alias cls='printf "\033c"'
 alias poweroff='poweroff -f'
 alias reboot='reboot -f'
 
