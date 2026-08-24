@@ -5,7 +5,7 @@ ARCH ?= x86_64
 
 # Single source of truth for the version: compiled into init's banner and
 # used in ISO filenames, so a release artifact always names what it is.
-VERSION = 0.6.0
+VERSION = 0.6.1
 
 # Alpine release the package manager installs from. Pinned like the kernel:
 # "latest-stable" would silently change the package set over time.
@@ -25,6 +25,14 @@ MEMORY = 2G
 # Kernel source pin -- bump both together (hash from cdn.kernel.org sha256sums.asc)
 KERNEL_VERSION = 6.18.46
 KERNEL_SHA256 = f5d44b93808b02cc2969c5404ba081d97523719c9fd2ba2de6db318b4141cca0
+
+# Options defconfig does not set that we need. x86_64's defconfig ships only
+# the legacy VGA text console, which does not exist under UEFI -- the firmware
+# hands over a linear framebuffer -- so without a framebuffer console the
+# screen stays black after GRUB on real hardware. arm64 already has these;
+# setting them for both keeps the two kernels honest.
+KERNEL_CONFIG_ENABLE = FB FB_EFI FB_VESA FRAMEBUFFER_CONSOLE \
+                       FRAMEBUFFER_CONSOLE_DETECT_PRIMARY
 
 ifeq ($(ARCH),arm64)
 KERNEL = $(BUILD_DIR)/Image
@@ -105,6 +113,9 @@ kernel:
 		cd linux-$(KERNEL_VERSION) && \
 		make ARCH=$(ARCH) mrproper && \
 		$(KMAKE) defconfig && \
+		./scripts/config --file /kbuild/build-$(ARCH)/.config \
+			$(foreach c,$(KERNEL_CONFIG_ENABLE),-e $(c)) && \
+		$(KMAKE) olddefconfig && \
 		$(KMAKE) -j\$$(nproc) $(KERNEL_IMAGE_TARGET) && \
 		mkdir -p /src/$(BUILD_DIR) && cp /kbuild/build-$(ARCH)/$(KERNEL_ARTIFACT) /src/$(KERNEL)"
 

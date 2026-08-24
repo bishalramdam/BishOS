@@ -103,12 +103,12 @@ jobs:
             sudo apt-get install -y -qq qemu-system-arm qemu-efi-aarch64 > /dev/null 2>&1
             cp /usr/share/AAVMF/AAVMF_CODE.fd /tmp/fw.fd
             cp /usr/share/AAVMF/AAVMF_VARS.fd /tmp/vars.fd
-            set -- qemu-system-aarch64 -machine virt -cpu max
+            set -- qemu-system-aarch64 -machine virt -cpu max -vga none
           else
             sudo apt-get install -y -qq qemu-system-x86 ovmf > /dev/null 2>&1
             cp /usr/share/OVMF/OVMF_CODE_4M.fd /tmp/fw.fd
             cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vars.fd
-            set -- qemu-system-x86_64
+            set -- qemu-system-x86_64 -vga none
           fi
 
           # Only ask for KVM if the runner actually exposes it; otherwise QEMU
