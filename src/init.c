@@ -20,12 +20,6 @@
 #define STRINGIFY(x) #x
 #define VERSION_STRING(x) STRINGIFY(x)
 
-// Block devices we look for a persistent root filesystem on, in order.
-// virtio is what QEMU gives us; sd*/nvme* cover VMware and real hardware.
-static const char *root_devices[] = {
-    "/dev/vda", "/dev/sda", "/dev/nvme0n1", NULL
-};
-
 #define NEWROOT "/newroot"
 
 // Only ever adopt a filesystem we made. mke2fs labels the disk image BISHOS,
@@ -110,24 +104,55 @@ static int is_bishos_root(const char *dev) {
     return strcmp(label, ROOT_LABEL) == 0;
 }
 
-static void try_switch_root(void) {
-    const char *dev = NULL;
+// Look for our labelled filesystem on every block device the kernel knows.
+// /proc/partitions lists whole disks and partitions alike, so this finds a
+// virtio disk, a USB stick's second partition, NVMe or an SD card without
+// hardcoding any names. Checking the label makes scanning everything safe.
+static int find_bishos_root(char *out, size_t outsz) {
+    char line[256];
+    FILE *f = fopen("/proc/partitions", "r");
 
-    // Block devices register a moment after PID 1 starts; wait briefly.
-    for (int i = 0; i < 50 && !dev; i++) {
-        for (int d = 0; root_devices[d]; d++) {
-            if (access(root_devices[d], F_OK) == 0 && is_bishos_root(root_devices[d])) {
-                dev = root_devices[d];
-                break;
+    if (!f) {
+        return 0;
+    }
+    // two header lines before the entries
+    if (fgets(line, sizeof line, f) && fgets(line, sizeof line, f)) {
+        while (fgets(line, sizeof line, f)) {
+            unsigned major, minor;
+            unsigned long long blocks;
+            char name[64], dev[80];
+
+            if (sscanf(line, "%u %u %llu %63s", &major, &minor, &blocks, name) != 4) {
+                continue;
+            }
+            snprintf(dev, sizeof dev, "/dev/%s", name);
+            if (is_bishos_root(dev)) {
+                snprintf(out, outsz, "%s", dev);
+                fclose(f);
+                return 1;
             }
         }
-        if (!dev) {
-            usleep(100000); // 100ms
+    }
+    fclose(f);
+    return 0;
+}
+
+static void try_switch_root(void) {
+    char devbuf[80];
+    const char *dev = NULL;
+
+    // Block devices register a moment after PID 1 starts; wait briefly. USB
+    // storage is the slow case -- enumeration can take a couple of seconds.
+    for (int i = 0; i < 50 && !dev; i++) {
+        if (find_bishos_root(devbuf, sizeof devbuf)) {
+            dev = devbuf;
+            break;
         }
+        usleep(100000); // 100ms
     }
 
     if (!dev) {
-        return; // no disk attached: caller falls back to running from RAM
+        return; // nothing of ours anywhere: caller falls back to running from RAM
     }
 
     mkdir(NEWROOT, 0755);
