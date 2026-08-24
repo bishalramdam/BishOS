@@ -84,11 +84,15 @@ jobs:
             xorriso -indev /src/build/${{ matrix.arch }}/${{ steps.ver.outputs.iso }} \
                     -report_el_torito plain
 
-      # Smoke-test that the ISO actually boots: the kernel must reach our
-      # PID 1 and print its banner, then shut down cleanly.
-      # Smoke-test that the ISO actually boots: the kernel must reach our
-      # PID 1 and print its banner. QEMU is polled and killed as soon as the
-      # banner appears, so a healthy boot costs seconds, not the full timeout.
+      # Two-phase boot test.
+      #
+      # Ordering console= cannot serve both cases: CONFIG_DUMMY_CONSOLE means
+      # tty0 registers even with no display hardware, swallowing output on a
+      # headless runner, while naming the serial port last steals the shell on
+      # a real machine where nothing is attached to it. So the ISO ships a
+      # display-first cmdline for humans, and CI proves the pieces separately:
+      # the kernel and init are booted directly with an explicit serial
+      # console, and the ISO is booted to prove GRUB loads that kernel.
       - name: Boot test
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -96,53 +100,71 @@ jobs:
           ARCH=${{ matrix.arch }}
           ISO=build/$ARCH/${{ steps.ver.outputs.iso }}
 
-          # Firmware lives in different packages per arch: ovmf ships x86
-          # OVMF, qemu-efi-aarch64 ships AAVMF. Installing the wrong one
-          # leaves QEMU with no -pflash to boot from.
           if [ "$ARCH" = "arm64" ]; then
             sudo apt-get install -y -qq qemu-system-arm qemu-efi-aarch64 > /dev/null 2>&1
             cp /usr/share/AAVMF/AAVMF_CODE.fd /tmp/fw.fd
             cp /usr/share/AAVMF/AAVMF_VARS.fd /tmp/vars.fd
-            set -- qemu-system-aarch64 -machine virt -cpu max -vga none
+            QEMU="qemu-system-aarch64 -machine virt -cpu max"
+            KERNEL=build/$ARCH/Image
+            CONSOLE=ttyAMA0
           else
             sudo apt-get install -y -qq qemu-system-x86 ovmf > /dev/null 2>&1
             cp /usr/share/OVMF/OVMF_CODE_4M.fd /tmp/fw.fd
             cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/vars.fd
-            set -- qemu-system-x86_64 -vga none
+            QEMU="qemu-system-x86_64"
+            KERNEL=build/$ARCH/bzImage
+            CONSOLE=ttyS0
           fi
 
-          # Only ask for KVM if the runner actually exposes it; otherwise QEMU
-          # prints two permission errors before falling back to emulation.
-          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
-            ACCEL="-accel kvm"
-          else
-            ACCEL="-accel tcg"
-            echo "note: /dev/kvm unavailable, emulating (slower)"
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then ACCEL="-accel kvm"; else ACCEL="-accel tcg"; fi
+
+          # wait_for <logfile> <pattern> -- poll, then kill whatever we started
+          wait_for() {
+            for _ in $(seq 1 150); do
+              grep -aqE "$2" "$1" && break
+              kill -0 "$QPID" 2>/dev/null || break
+              sleep 2
+            done
+            kill "$QPID" 2>/dev/null || true
+            wait "$QPID" 2>/dev/null || true
+          }
+
+          echo "::group::Phase 1 - kernel + init, direct boot over serial"
+          $QEMU $ACCEL -m 512 -kernel "$KERNEL" \
+            -initrd build/$ARCH/initramfs.cpio.gz \
+            -append "console=$CONSOLE quiet panic=1" \
+            -nographic -no-reboot > direct.log 2>&1 &
+          QPID=$!
+          wait_for direct.log "Welcome to BishOS|Kernel panic"
+          tr -d "\000" < direct.log | tail -25
+          echo "::endgroup::"
+
+          if grep -aq "Kernel panic" direct.log; then
+            echo "::error::kernel panicked booting directly"; exit 1
+          fi
+          if ! grep -aq "Welcome to BishOS" direct.log; then
+            echo "::error::kernel + initramfs did not reach the BishOS banner"; exit 1
           fi
 
-          "$@" $ACCEL -m 512 \
+          echo "::group::Phase 2 - ISO boots through UEFI and GRUB"
+          $QEMU $ACCEL -m 512 \
             -drive if=pflash,format=raw,readonly=on,file=/tmp/fw.fd \
             -drive if=pflash,format=raw,file=/tmp/vars.fd \
-            -cdrom "$ISO" -nographic -no-reboot > boot.log 2>&1 &
-          QEMU_PID=$!
+            -cdrom "$ISO" -nographic -no-reboot > iso.log 2>&1 &
+          QPID=$!
+          wait_for iso.log "Booting .BishOS|Welcome to BishOS|Kernel panic"
+          tr -d "\000" < iso.log | tail -25
+          echo "::endgroup::"
 
-          for _ in $(seq 1 150); do
-            grep -aqE "Welcome to BishOS|Kernel panic" boot.log && break
-            kill -0 "$QEMU_PID" 2>/dev/null || break
-            sleep 2
-          done
-          kill "$QEMU_PID" 2>/dev/null || true
-          wait "$QEMU_PID" 2>/dev/null || true
-
-          echo "--- boot log tail ---"
-          tr -d "\000" < boot.log | tail -40
-          if grep -aq "Kernel panic" boot.log; then
-            echo "::error::kernel panic during boot"; exit 1
+          if grep -aq "Kernel panic" iso.log; then
+            echo "::error::kernel panicked booting the ISO"; exit 1
           fi
-          if ! grep -aq "Welcome to BishOS" boot.log; then
-            echo "::error::ISO did not reach the BishOS banner"; exit 1
+          # The ISO hands the console to the display for real hardware, so the
+          # banner is not expected here -- reaching the handoff is the proof.
+          if ! grep -aqE "Booting .BishOS|Welcome to BishOS" iso.log; then
+            echo "::error::GRUB did not load the kernel from the ISO"; exit 1
           fi
-          echo "Boot test passed."
+          echo "Boot test passed: kernel+init verified directly, ISO verified through GRUB."
 
       # GitHub Packages has no plain-file registry, so the ISO goes up as an
       # OCI artifact -- which is what makes it appear under Packages. Pull it
