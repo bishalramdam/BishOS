@@ -71,7 +71,7 @@ int main() {
     printf("     Linux Kernel + BusyBox + Network     \n");
     printf("==========================================\n");
     printf("\n");
-    printf("Networking: Online (Intel e1000 + Google DNS: 8.8.8.8)\n");
+    printf("Networking: Online (DNS: 8.8.8.8)\n");
     printf("User accounts: root, bishal (switch with: 'su - bishal')\n");
     printf("To cleanly shut down the OS, run: poweroff\n\n");
 
