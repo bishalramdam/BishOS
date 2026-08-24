@@ -16,6 +16,14 @@ else
     export HOME="/home/$USER"
 fi
 
+# Per-user binaries. Tools installed by curl-pipe-shell installers land in
+# ~/.local/bin, which nothing else adds to PATH. The case guard keeps PATH
+# from growing on every login, and this comes after HOME is decided above.
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+
 # Fancy colored shell prompt:
 # Green for root: [root@BishOS ~]#
 # Cyan for normal users: [bishal@BishOS ~]$
