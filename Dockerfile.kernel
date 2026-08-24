@@ -22,6 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         kmod \
         cpio \
+        grub-efi-arm64-bin \
+        xorriso \
+        mtools \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /kbuild
