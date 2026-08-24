@@ -96,6 +96,30 @@ Builds for **two architectures** from the same source:
    Growing works in place because the image is a whole-disk ext4 filesystem
    with no partition table -- there is no partition to move before resizing.
 
+### Persistent live USB
+
+init looks for its root on *any* block device -- whole disks and partitions
+alike -- and adopts the first ext4 filesystem labelled `BISHOS`. That is the
+whole mechanism, so a live USB gains persistence by giving it such a
+partition. On a Linux machine, with `/dev/sdX` the stick:
+
+```bash
+sudo wipefs -a /dev/sdX                      # clear old signatures
+sudo dd if=bishos-x86_64_v0.6.0.iso of=/dev/sdX bs=4M conv=fsync
+sudo sgdisk -e /dev/sdX                      # see below
+sudo sgdisk -n 0:0:0 -t 0:8300 /dev/sdX      # claim the free space
+sudo mkfs.ext4 -L BISHOS /dev/sdX3           # check the real partition name first
+```
+
+`sgdisk -e` is the non-obvious step. The ISO's GPT declares the disk to end
+where the image ends (~49 MB), so the rest of the stick sits outside the
+partition table and no tool offers it as free space until the backup header
+is moved to the true end of the device.
+
+The label must be exactly `BISHOS` -- it is compared with `strcmp`. Anything
+else is ignored, which is what stops BishOS from adopting the internal drive
+of whatever machine it is booted on.
+
    The VM gets 2 GB of RAM by default (`make MEMORY=4G run` to change it).
    That figure also sizes `/tmp`: it is a tmpfs, so it defaults to half of
    RAM and lives *in* RAM. If an installer dies with `No space left on
@@ -106,8 +130,8 @@ Builds for **two architectures** from the same source:
 4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
    the same `grub.cfg`; only the kernel binary differs:
    ```bash
-   make ARCH=arm64 iso   # -> build/arm64/bishos-arm64_v0.5.0.iso   (UEFI)
-   make iso              # -> build/x86_64/bishos-x86_64_v0.5.0.iso (UEFI + BIOS)
+   make ARCH=arm64 iso   # -> build/arm64/bishos-arm64_v0.6.0.iso   (UEFI)
+   make iso              # -> build/x86_64/bishos-x86_64_v0.6.0.iso (UEFI + BIOS)
    ```
    `VERSION` in the Makefile is the single source of truth: it names the ISO
    and is compiled into init's banner, so a booted system always reports the
@@ -124,8 +148,8 @@ Builds for **two architectures** from the same source:
    [tagged releases](https://github.com/bishalramdam/BishOS/releases), and
    published to GitHub Packages as OCI artifacts:
    ```bash
-   oras pull ghcr.io/bishalramdam/bishos:0.5.0-arm64
-   oras pull ghcr.io/bishalramdam/bishos:0.5.0-x86_64
+   oras pull ghcr.io/bishalramdam/bishos:0.6.0-arm64
+   oras pull ghcr.io/bishalramdam/bishos:0.6.0-x86_64
    ```
    In VMware Fusion: New VM -> drag the ISO in -> "Other Linux 6.x 64-bit Arm".
    The same shell lands on the serial port in QEMU and on the screen in
@@ -171,6 +195,9 @@ Builds for **two architectures** from the same source:
         `/proc`, `/sys`, `/dev` across with `MS_MOVE`
   - [x] Graceful fallback to running from RAM when no disk is attached
         (so the ISO and direct-kernel boots still work)
+  - [x] The root is found by scanning every block device for the `BISHOS`
+        label, so it can live on a disk, a USB partition or an SD card --
+        and a foreign disk is never adopted
   - [x] Read-only remount on shutdown so ext4 stays clean
 - [x] **Phase 6: Real Hypervisors & Init Lifecycle**
   - [x] UEFI-bootable ISO via GRUB (`make ARCH=arm64 iso`), verified on

@@ -5,7 +5,7 @@ ARCH ?= x86_64
 
 # Single source of truth for the version: compiled into init's banner and
 # used in ISO filenames, so a release artifact always names what it is.
-VERSION = 0.5.0
+VERSION = 0.6.0
 
 # Alpine release the package manager installs from. Pinned like the kernel:
 # "latest-stable" would silently change the package set over time.
