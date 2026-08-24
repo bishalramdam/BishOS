@@ -3,6 +3,10 @@
 #   make run              -> x86_64, software-emulated (TCG)
 ARCH ?= x86_64
 
+# Single source of truth for the version: compiled into init's banner and
+# used in ISO filenames, so a release artifact always names what it is.
+VERSION = 0.3.0
+
 BUILD_DIR = build/$(ARCH)
 ROOTFS_DIR = $(BUILD_DIR)/rootfs
 INITRAMFS = $(BUILD_DIR)/initramfs.cpio.gz
@@ -34,7 +38,7 @@ CONSOLE = ttyS0
 NIC_MODEL = e1000
 endif
 
-.PHONY: all clean rootfs initramfs kernel run iso disk disk-reset print-kernel-version
+.PHONY: all clean rootfs initramfs kernel run iso disk disk-reset print-kernel-version print-version
 
 all: kernel rootfs initramfs
 
@@ -49,7 +53,7 @@ rootfs:
 		         /work/$(ROOTFS_DIR)/dev /work/$(ROOTFS_DIR)/root \
 		         /work/$(ROOTFS_DIR)/home/bishal /work/$(ROOTFS_DIR)/tmp \
 		         /work/$(ROOTFS_DIR)/etc /work/$(ROOTFS_DIR)/usr/share/udhcpc && \
-		gcc -static -O2 /work/src/init.c -o /work/$(ROOTFS_DIR)/init && \
+		gcc -static -O2 -DBISHOS_VERSION=$(VERSION) /work/src/init.c -o /work/$(ROOTFS_DIR)/init && \
 		cp /bin/busybox.static /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod +x /work/$(ROOTFS_DIR)/bin/busybox && \
 		cd /work/$(ROOTFS_DIR)/bin && \
@@ -120,7 +124,7 @@ disk-reset:
 # architecture; only the kernel binary differs, and it is staged under the
 # same name (/boot/vmlinuz). grub-mkrescue emits a UEFI boot path for both
 # arches, and on x86_64 additionally a legacy-BIOS one in the same image.
-ISO = $(BUILD_DIR)/bishos-$(ARCH).iso
+ISO = $(BUILD_DIR)/bishos-$(VERSION)-$(ARCH).iso
 
 iso: all
 	rm -rf $(BUILD_DIR)/iso
@@ -130,7 +134,7 @@ iso: all
 	cp grub/grub.cfg $(BUILD_DIR)/iso/boot/grub/
 	docker build --platform $(DOCKER_PLATFORM) -q -f Dockerfile.iso -t bishos-iso:$(ARCH) .
 	docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/src bishos-iso:$(ARCH) \
-		sh -c "cd /src/$(BUILD_DIR) && grub-mkrescue -o bishos-$(ARCH).iso iso/"
+		sh -c "cd /src/$(BUILD_DIR) && grub-mkrescue -o bishos-$(VERSION)-$(ARCH).iso iso/"
 
 # 6. Boot BishOS in QEMU: initramfs finds the virtio disk and switch_roots
 # into it, so anything written to / survives a reboot.
@@ -147,6 +151,10 @@ run: all disk
 # Used by CI to key the kernel source cache on the pinned version
 print-kernel-version:
 	@echo $(KERNEL_VERSION)
+
+# Used by CI to name release artifacts
+print-version:
+	@echo $(VERSION)
 
 clean:
 	rm -rf build

@@ -12,6 +12,14 @@
 #include <termios.h>
 #include <errno.h>
 
+// Version comes from the Makefile (-DBISHOS_VERSION=0.3.0). The two-step
+// stringify is what turns that bare token into a string literal.
+#ifndef BISHOS_VERSION
+#define BISHOS_VERSION dev
+#endif
+#define STRINGIFY(x) #x
+#define VERSION_STRING(x) STRINGIFY(x)
+
 // Block devices we look for a persistent root filesystem on, in order.
 // virtio is what QEMU gives us; sd*/nvme* cover VMware and real hardware.
 static const char *root_devices[] = {
@@ -232,7 +240,7 @@ int main(int argc, char **argv) {
     // 10. Welcome banner
     printf("\n");
     printf("==========================================\n");
-    printf("         Welcome to BishOS v0.4!          \n");
+    printf("        Welcome to BishOS v%s\n", VERSION_STRING(BISHOS_VERSION));
     printf("     Linux Kernel + BusyBox + Network     \n");
     printf("==========================================\n");
     printf("\n");

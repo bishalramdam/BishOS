@@ -94,12 +94,20 @@ Builds for **two architectures** from the same source:
 4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
    the same `grub.cfg`; only the kernel binary differs:
    ```bash
-   make ARCH=arm64 iso   # -> build/arm64/bishos-arm64.iso   (UEFI)
-   make iso              # -> build/x86_64/bishos-x86_64.iso (UEFI + BIOS)
+   make ARCH=arm64 iso   # -> build/arm64/bishos-0.3.0-arm64.iso   (UEFI)
+   make iso              # -> build/x86_64/bishos-0.3.0-x86_64.iso (UEFI + BIOS)
    ```
-   Prebuilt ISOs for both architectures are also attached to every
+   `VERSION` in the Makefile is the single source of truth: it names the ISO
+   and is compiled into init's banner, so a booted system always reports the
+   version of the image it came from.
+   Prebuilt ISOs for both architectures are attached to every
    [CI run](https://github.com/bishalramdam/BishOS/actions) and to
-   [tagged releases](https://github.com/bishalramdam/BishOS/releases).
+   [tagged releases](https://github.com/bishalramdam/BishOS/releases), and
+   published to GitHub Packages as OCI artifacts:
+   ```bash
+   oras pull ghcr.io/bishalramdam/bishos:0.3.0-arm64
+   oras pull ghcr.io/bishalramdam/bishos:0.3.0-x86_64
+   ```
    In VMware Fusion: New VM -> drag the ISO in -> "Other Linux 6.x 64-bit Arm".
    The same shell lands on the serial port in QEMU and on the screen in
    VMware -- the kernel gives /dev/console to the last console= that exists.
@@ -150,7 +158,8 @@ Builds for **two architectures** from the same source:
   - [x] One GRUB config for every architecture; x86_64 ISOs carry both a
         UEFI and a legacy-BIOS boot path
   - [x] CI builds and boot-tests both ISOs on native runners, publishes
-        them on tagged releases
+        them to GitHub Packages (ghcr.io) and to tagged releases
+  - [x] Semantic versioning: one `VERSION` names the ISO and the banner
 
 ---
 

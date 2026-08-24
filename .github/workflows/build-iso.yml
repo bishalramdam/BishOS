@@ -26,6 +26,9 @@ jobs:
     name: ${{ matrix.arch }} - ${{ matrix.firmware }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
@@ -33,25 +36,37 @@ jobs:
       # The kernel source tarball is checksum-pinned in the Makefile, so
       # caching it by that pin is always safe -- a bumped version misses
       # the cache and re-downloads.
-      - name: Read kernel pin
-        id: pin
+      - name: Read versions
+        id: ver
         run: |
-          echo "version=$(make -s print-kernel-version)" >> "$GITHUB_OUTPUT"
+          BISHOS_VERSION=$(make -s print-version)
+          echo "bishos=$BISHOS_VERSION" >> "$GITHUB_OUTPUT"
+          echo "kernel=$(make -s print-kernel-version)" >> "$GITHUB_OUTPUT"
+          echo "iso=bishos-$BISHOS_VERSION-${{ matrix.arch }}.iso" >> "$GITHUB_OUTPUT"
+          # A tag must agree with the Makefile, or the artifact would be
+          # named one version and released as another.
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            TAG_VERSION=${GITHUB_REF_NAME#v}
+            if [ "$TAG_VERSION" != "$BISHOS_VERSION" ]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match Makefile VERSION=$BISHOS_VERSION"
+              exit 1
+            fi
+          fi
 
       - name: Cache kernel tarball
         uses: actions/cache@v4
         with:
           path: kernel-cache
-          key: linux-${{ steps.pin.outputs.version }}
+          key: linux-${{ steps.ver.outputs.kernel }}
 
       # Docker volumes cannot be restored from cache, so seed the volume from
       # the cached tarball (and save it back) to skip the ~140 MB download.
       - name: Seed kernel volume from cache
         run: |
           docker volume create bishos-kernel
-          if [ -f kernel-cache/linux-${{ steps.pin.outputs.version }}.tar.xz ]; then
+          if [ -f kernel-cache/linux-${{ steps.ver.outputs.kernel }}.tar.xz ]; then
             docker run --rm -v bishos-kernel:/kbuild -v "$PWD/kernel-cache":/cache \
-              debian:trixie-slim cp /cache/linux-${{ steps.pin.outputs.version }}.tar.xz /kbuild/
+              debian:trixie-slim cp /cache/linux-${{ steps.ver.outputs.kernel }}.tar.xz /kbuild/
           fi
 
       - name: Build ISO
@@ -61,13 +76,13 @@ jobs:
         run: |
           mkdir -p kernel-cache
           docker run --rm -v bishos-kernel:/kbuild -v "$PWD/kernel-cache":/cache \
-            debian:trixie-slim cp /kbuild/linux-${{ steps.pin.outputs.version }}.tar.xz /cache/
+            debian:trixie-slim cp /kbuild/linux-${{ steps.ver.outputs.kernel }}.tar.xz /cache/
 
       - name: Verify ISO is bootable
         run: |
-          ls -lh build/${{ matrix.arch }}/bishos-${{ matrix.arch }}.iso
+          ls -lh build/${{ matrix.arch }}/${{ steps.ver.outputs.iso }}
           docker run --rm -v "$PWD":/src bishos-iso:${{ matrix.arch }} \
-            xorriso -indev /src/build/${{ matrix.arch }}/bishos-${{ matrix.arch }}.iso \
+            xorriso -indev /src/build/${{ matrix.arch }}/${{ steps.ver.outputs.iso }} \
                     -report_el_torito plain
 
       # Smoke-test that the ISO actually boots: the kernel must reach our
@@ -80,7 +95,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           ARCH=${{ matrix.arch }}
-          ISO=build/$ARCH/bishos-$ARCH.iso
+          ISO=build/$ARCH/${{ steps.ver.outputs.iso }}
 
           # Firmware lives in different packages per arch: ovmf ships x86
           # OVMF, qemu-efi-aarch64 ships AAVMF. Installing the wrong one
@@ -123,10 +138,34 @@ jobs:
           fi
           echo "Boot test passed."
 
+      # GitHub Packages has no plain-file registry, so the ISO goes up as an
+      # OCI artifact -- which is what makes it appear under Packages. Pull it
+      # back with:
+      #   oras pull ghcr.io/<owner>/bishos:<version>-<arch>
+      - name: Publish ISO to GitHub Packages (ghcr.io)
+        if: github.event_name != 'pull_request'
+        uses: oras-project/setup-oras@v1
+
+      - name: Push OCI artifact
+        if: github.event_name != 'pull_request'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr "[:upper:]" "[:lower:]")
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          cd build/${{ matrix.arch }}
+          oras push \
+            "ghcr.io/$OWNER/bishos:${{ steps.ver.outputs.bishos }}-${{ matrix.arch }}" \
+            --artifact-type application/vnd.bishos.iso.v1 \
+            --annotation "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --annotation "org.opencontainers.image.version=${{ steps.ver.outputs.bishos }}" \
+            --annotation "org.opencontainers.image.revision=${{ github.sha }}" \
+            "${{ steps.ver.outputs.iso }}:application/vnd.efi.iso"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: bishos-${{ matrix.arch }}-iso
-          path: build/${{ matrix.arch }}/bishos-${{ matrix.arch }}.iso
+          name: bishos-${{ steps.ver.outputs.bishos }}-${{ matrix.arch }}-iso
+          path: build/${{ matrix.arch }}/${{ steps.ver.outputs.iso }}
           retention-days: 30
 
   # Tagging v* publishes both ISOs as a GitHub Release.
