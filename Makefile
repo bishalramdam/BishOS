@@ -14,6 +14,7 @@ KERNEL_SHA256 = f5d44b93808b02cc2969c5404ba081d97523719c9fd2ba2de6db318b4141cca0
 ifeq ($(ARCH),arm64)
 KERNEL = $(BUILD_DIR)/Image
 KERNEL_ARTIFACT = arch/arm64/boot/Image
+KERNEL_IMAGE_TARGET = Image
 # native arm64 container: no cross-compiler needed
 KMAKE = make O=/kbuild/build-arm64 ARCH=arm64
 DOCKER_PLATFORM = linux/arm64
@@ -23,6 +24,7 @@ NIC_MODEL = virtio-net-pci
 else
 KERNEL = $(BUILD_DIR)/bzImage
 KERNEL_ARTIFACT = arch/x86/boot/bzImage
+KERNEL_IMAGE_TARGET = bzImage
 KMAKE = make O=/kbuild/build-x86_64 ARCH=x86_64 CROSS_COMPILE=x86_64-linux-gnu-
 DOCKER_PLATFORM = linux/amd64
 QEMU = qemu-system-x86_64
@@ -30,7 +32,7 @@ CONSOLE = ttyS0
 NIC_MODEL = e1000
 endif
 
-.PHONY: all clean rootfs initramfs kernel run iso
+.PHONY: all clean rootfs initramfs kernel run iso print-kernel-version
 
 all: kernel rootfs initramfs
 
@@ -83,22 +85,37 @@ kernel:
 		cd linux-$(KERNEL_VERSION) && \
 		make ARCH=$(ARCH) mrproper && \
 		$(KMAKE) defconfig && \
-		$(KMAKE) -j\$$(nproc) && \
+		$(KMAKE) -j\$$(nproc) $(KERNEL_IMAGE_TARGET) && \
 		mkdir -p /src/$(BUILD_DIR) && cp /kbuild/build-$(ARCH)/$(KERNEL_ARTIFACT) /src/$(KERNEL)"
 
-# 4. Build a UEFI-bootable ISO (arm64 only for now; x86_64 needs the BIOS/
-# isolinux path, staged in isolinux/ but not wired up yet). Boots QEMU with
-# EDK2 firmware, VMware Fusion, and other UEFI arm64 hypervisors.
+# 4. Build a bootable ISO: arm64 -> UEFI (GRUB, for VMware Fusion / EDK2),
+# x86_64 -> legacy BIOS (isolinux, El Torito + hybrid MBR so the same file
+# boots from CD and from a dd'd USB stick).
+ISO = $(BUILD_DIR)/bishos-$(ARCH).iso
+
 iso: all
-	@if [ "$(ARCH)" != "arm64" ]; then \
-		echo "The ISO target is arm64-only for now: make ARCH=arm64 iso"; exit 1; fi
 	rm -rf $(BUILD_DIR)/iso
+ifeq ($(ARCH),arm64)
 	mkdir -p $(BUILD_DIR)/iso/boot/grub
-	cp $(KERNEL) $(BUILD_DIR)/iso/boot/
-	cp $(INITRAMFS) $(BUILD_DIR)/iso/boot/
+	cp $(KERNEL) $(INITRAMFS) $(BUILD_DIR)/iso/boot/
 	cp grub/grub.cfg $(BUILD_DIR)/iso/boot/grub/
 	docker run --rm -v "$$PWD":/src bishos-kbuild bash -c \
 		"cd /src/$(BUILD_DIR) && grub-mkrescue -o bishos-arm64.iso iso/"
+else
+	mkdir -p $(BUILD_DIR)/iso/boot $(BUILD_DIR)/iso/isolinux
+	cp $(KERNEL) $(INITRAMFS) $(BUILD_DIR)/iso/boot/
+	cp isolinux/isolinux.cfg $(BUILD_DIR)/iso/isolinux/
+	docker run --rm -v "$$PWD":/src bishos-kbuild bash -c "\
+		cp /usr/lib/ISOLINUX/isolinux.bin \
+		   /usr/lib/syslinux/modules/bios/ldlinux.c32 \
+		   /src/$(BUILD_DIR)/iso/isolinux/ && \
+		cd /src/$(BUILD_DIR) && \
+		xorriso -as mkisofs -o bishos-x86_64.iso -V BISHOS \
+			-b isolinux/isolinux.bin -c isolinux/boot.cat \
+			-no-emul-boot -boot-load-size 4 -boot-info-table \
+			-isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+			iso/"
+endif
 
 # 5. Boot BishOS in QEMU with User-mode Virtual Network Card
 run: all
@@ -109,6 +126,10 @@ run: all
 		-nic user,model=$(NIC_MODEL) \
 		-nographic \
 		-m 256M
+
+# Used by CI to key the kernel source cache on the pinned version
+print-kernel-version:
+	@echo $(KERNEL_VERSION)
 
 clean:
 	rm -rf build

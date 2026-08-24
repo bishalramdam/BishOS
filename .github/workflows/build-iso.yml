@@ -1,0 +1,118 @@
+name: Build ISOs
+
+# Bootable ISOs for both architectures. Each arch builds on a native runner
+# (ubuntu-latest = x86_64, ubuntu-24.04-arm = arm64), so nothing is emulated
+# and the arm64 kernel needs no cross-toolchain.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            firmware: BIOS (isolinux)
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            firmware: UEFI (GRUB)
+
+    name: ${{ matrix.arch }} - ${{ matrix.firmware }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The kernel source tarball is checksum-pinned in the Makefile, so
+      # caching it by that pin is always safe -- a bumped version misses
+      # the cache and re-downloads.
+      - name: Read kernel pin
+        id: pin
+        run: |
+          echo "version=$(make -s print-kernel-version)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache kernel tarball
+        uses: actions/cache@v4
+        with:
+          path: kernel-cache
+          key: linux-${{ steps.pin.outputs.version }}
+
+      # Docker volumes cannot be restored from cache, so seed the volume from
+      # the cached tarball (and save it back) to skip the ~140 MB download.
+      - name: Seed kernel volume from cache
+        run: |
+          docker volume create bishos-kernel
+          if [ -f kernel-cache/linux-${{ steps.pin.outputs.version }}.tar.xz ]; then
+            docker run --rm -v bishos-kernel:/kbuild -v "$PWD/kernel-cache":/cache \
+              debian:trixie-slim cp /cache/linux-${{ steps.pin.outputs.version }}.tar.xz /kbuild/
+          fi
+
+      - name: Build ISO
+        run: make ARCH=${{ matrix.arch }} iso
+
+      - name: Save kernel tarball to cache
+        run: |
+          mkdir -p kernel-cache
+          docker run --rm -v bishos-kernel:/kbuild -v "$PWD/kernel-cache":/cache \
+            debian:trixie-slim cp /kbuild/linux-${{ steps.pin.outputs.version }}.tar.xz /cache/
+
+      - name: Verify ISO is bootable
+        run: |
+          ls -lh build/${{ matrix.arch }}/bishos-${{ matrix.arch }}.iso
+          docker run --rm -v "$PWD":/src bishos-kbuild \
+            xorriso -indev /src/build/${{ matrix.arch }}/bishos-${{ matrix.arch }}.iso \
+                    -report_el_torito plain
+
+      # Smoke-test that the ISO actually boots: the kernel must reach our
+      # PID 1 and print its banner, then shut down cleanly.
+      - name: Boot test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 qemu-system-arm ovmf
+          ARCH=${{ matrix.arch }}
+          if [ "$ARCH" = "arm64" ]; then
+            timeout 300 qemu-system-aarch64 -machine virt -cpu max -m 512 \
+              -drive if=pflash,format=raw,readonly=on,file=/usr/share/AAVMF/AAVMF_CODE.fd \
+              -cdrom build/$ARCH/bishos-$ARCH.iso -nographic -no-reboot \
+              > boot.log 2>&1 || true
+          else
+            timeout 300 qemu-system-x86_64 -m 512 \
+              -cdrom build/$ARCH/bishos-$ARCH.iso -nographic -no-reboot \
+              > boot.log 2>&1 || true
+          fi
+          echo "--- boot log tail ---"
+          tail -40 boot.log
+          grep -aq "Welcome to BishOS" boot.log \
+            || { echo "::error::ISO did not reach the BishOS banner"; exit 1; }
+          grep -aq "Kernel panic" boot.log \
+            && { echo "::error::kernel panic during boot"; exit 1; }
+          echo "Boot test passed."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bishos-${{ matrix.arch }}-iso
+          path: build/${{ matrix.arch }}/bishos-${{ matrix.arch }}.iso
+          retention-days: 30
+
+  # Tagging v* publishes both ISOs as a GitHub Release.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: isos
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: isos/**/*.iso
+          generate_release_notes: true

@@ -1,5 +1,7 @@
 # BishOS 🐧
 
+[![Build ISOs](https://github.com/bishalramdam/BishOS/actions/workflows/build-iso.yml/badge.svg)](https://github.com/bishalramdam/BishOS/actions/workflows/build-iso.yml)
+
 A minimal Linux operating system built modularly like **Lego blocks**: combining the mainline **Linux kernel** (compiled from source) with custom and open-source userspace components (`/init`, shell, standard utilities) to learn operating system fundamentals from the ground up.
 
 Builds for **two architectures** from the same source:
@@ -71,11 +73,14 @@ Builds for **two architectures** from the same source:
 3. **Exit QEMU**:
    Press `Ctrl + A`, release, then press `X`.
 
-4. **Build a UEFI-bootable ISO** (arm64) for VMware Fusion or any UEFI
-   arm64 hypervisor:
+4. **Build a bootable ISO**:
    ```bash
-   make ARCH=arm64 iso   # -> build/arm64/bishos-arm64.iso
+   make ARCH=arm64 iso   # UEFI/GRUB  -> build/arm64/bishos-arm64.iso
+   make iso              # BIOS/isolinux -> build/x86_64/bishos-x86_64.iso
    ```
+   Prebuilt ISOs for both architectures are also attached to every
+   [CI run](https://github.com/bishalramdam/BishOS/actions) and to
+   [tagged releases](https://github.com/bishalramdam/BishOS/releases).
    In VMware Fusion: New VM -> drag the ISO in -> "Other Linux 6.x 64-bit Arm".
    The same shell lands on the serial port in QEMU and on the screen in
    VMware -- the kernel gives /dev/console to the last console= that exists.
@@ -113,19 +118,23 @@ Builds for **two architectures** from the same source:
   - [x] Graceful shutdown: `poweroff`/`reboot`/`halt` signal PID 1
         (SIGUSR2/SIGTERM/SIGUSR1), which terminates and reaps all
         processes, syncs, and calls `reboot(2)`
-  - [ ] BIOS-bootable x86_64 ISO (isolinux config staged in `isolinux/`)
+  - [x] BIOS-bootable x86_64 ISO (isolinux, hybrid MBR for CD **and** USB)
+  - [x] CI builds and boot-tests both ISOs on native runners, publishes
+        them on tagged releases
 
 ---
 
 ## 📂 Project Layout
 
 ```
+├── .github/workflows/
+│   └── build-iso.yml   # CI: builds + boot-tests both ISOs, publishes releases
 ├── Makefile            # Build and run automation (ARCH=x86_64 | arm64)
 ├── Dockerfile.kernel   # Kernel build container (toolchains + GRUB/xorriso for ISOs)
 ├── grub/
 │   └── grub.cfg        # UEFI ISO boot menu (arm64)
 ├── isolinux/
-│   └── isolinux.cfg    # BIOS ISO boot menu (x86_64, not wired up yet)
+│   └── isolinux.cfg    # BIOS ISO boot menu (x86_64)
 ├── etc/                # System configuration overlay
 │   ├── passwd          # User account database (root, bishal)
 │   ├── group           # Group definitions
