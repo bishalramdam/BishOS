@@ -1,0 +1,77 @@
+#!/bin/sh
+# Bring up networking, as configured in /etc/bishos/network.
+#
+# Run by init, which reads the FIRST LINE of stdout as the description for its
+# banner and treats a non-zero exit, or no output, as "this did not work" --
+# in which case it falls back to the addresses compiled into it. So: print one
+# line describing what happened, and exit 0 only if the network is actually up.
+#
+# Being a script rather than C is the point. Networking is the part of a
+# machine most likely to need a change on the machine itself, and here that is
+# an edit and a re-run rather than a recompile, a rebuilt initramfs and a
+# reboot:  sudo /etc/bishos/net-up
+
+CONF=/etc/bishos/network
+
+# Defaults identical to init's compiled-in ones, so a missing or partial
+# config file degrades to the old behaviour instead of to nothing.
+IFACE=eth0
+MODE=dhcp
+FALLBACK_ADDRESS=10.0.2.15
+FALLBACK_NETMASK=255.255.255.0
+FALLBACK_GATEWAY=10.0.2.2
+FALLBACK_DNS="8.8.8.8 8.8.4.4"
+USE_DHCP_DNS=yes
+
+[ -f "$CONF" ] && . "$CONF"
+
+# Loopback first and always. Plenty of things talk to 127.0.0.1 without ever
+# touching the network, and they should work even when nothing else does.
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+write_fallback_dns() {
+    : > /etc/resolv.conf
+    for s in $FALLBACK_DNS; do
+        echo "nameserver $s" >> /etc/resolv.conf
+    done
+}
+
+use_static() {
+    ifconfig "$IFACE" "$FALLBACK_ADDRESS" netmask "$FALLBACK_NETMASK" up 2>/dev/null
+    if [ -n "$FALLBACK_GATEWAY" ]; then
+        route add default gw "$FALLBACK_GATEWAY" dev "$IFACE" 2>/dev/null
+    fi
+    write_fallback_dns
+}
+
+ifconfig "$IFACE" up 2>/dev/null
+
+# The udhcpc script reads these out of the environment when a lease arrives.
+export USE_DHCP_DNS FALLBACK_DNS
+
+case "$MODE" in
+    static)
+        use_static
+        echo "static $FALLBACK_ADDRESS (/etc/bishos/network)"
+        ;;
+    dhcp)
+        # -n gives up rather than backgrounding, -q exits once configured, and
+        # -t 3 -T 2 bounds the whole attempt to about six seconds. init waits
+        # for this, so it must not be able to wait forever.
+        if udhcpc -i "$IFACE" -s /usr/share/udhcpc/default.script \
+                  -n -q -t 3 -T 2 >/dev/null 2>&1; then
+            echo "DHCP"
+        else
+            use_static
+            echo "static fallback $FALLBACK_ADDRESS (no DHCP answer)"
+        fi
+        ;;
+    *)
+        # An unrecognised MODE is a typo, not a request. Say so, and still
+        # bring the machine up rather than leaving it unreachable.
+        use_static
+        echo "static fallback $FALLBACK_ADDRESS (MODE='$MODE' not understood)"
+        ;;
+esac
+
+exit 0

@@ -20,8 +20,21 @@ case "$1" in
                 route add default gw "$r" dev "$interface"
             done
         fi
-        echo "nameserver 8.8.8.8" > /etc/resolv.conf
-        echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+        # Use the nameservers the DHCP server offered. The old behaviour --
+        # always writing Google's -- meant a real router's DNS was discarded,
+        # so local names it alone can resolve (a NAS, a printer, anything on
+        # the LAN) simply did not exist. Set USE_DHCP_DNS=no in
+        # /etc/bishos/network to go back to that deliberately.
+        : > /etc/resolv.conf
+        if [ "${USE_DHCP_DNS:-yes}" = "yes" ] && [ -n "$dns" ]; then
+            for s in $dns; do
+                echo "nameserver $s" >> /etc/resolv.conf
+            done
+        else
+            for s in ${FALLBACK_DNS:-8.8.8.8 8.8.4.4}; do
+                echo "nameserver $s" >> /etc/resolv.conf
+            done
+        fi
         ;;
 esac
 

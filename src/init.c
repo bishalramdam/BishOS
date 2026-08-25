@@ -31,6 +31,9 @@
 // is no quoting, because a shell to do the quoting is exactly what an init
 // must not have to depend on.
 #define SERVICES_FILE "/etc/bishos/services"
+
+// Networking, applied by a script so it can be changed without a rebuild.
+#define NET_SCRIPT "/etc/bishos/net-up"
 #define MAX_SERVICES 32
 #define MAX_ARGS 16
 
@@ -622,6 +625,57 @@ static void service_exited(pid_t pid, int status) {
     // the entire job.
 }
 
+// Run /etc/bishos/net-up and take its first line of output as the description
+// of what it did. Returns 0 -- meaning "use the compiled-in path instead" --
+// if the script is absent, cannot be run, says nothing, or exits non-zero.
+//
+// The script bounds its own runtime (udhcpc gets -t 3 -T 2, about six
+// seconds); init is PID 1 and waits here, so nothing in it may block forever.
+// First nameserver actually in /etc/resolv.conf, for the banner. It used to
+// print a hardcoded 8.8.8.8, which stopped being true the moment DNS started
+// coming from DHCP -- and a banner that states the wrong resolver is worse
+// than one that says nothing, because it is the first thing consulted when
+// name lookups misbehave.
+static void first_nameserver(char *out, size_t outsz) {
+    char line[256];
+    FILE *f = fopen("/etc/resolv.conf", "r");
+
+    out[0] = '\0';
+    if (!f) {
+        return;
+    }
+    while (fgets(line, sizeof line, f)) {
+        char ns[128];
+
+        if (sscanf(line, " nameserver %127s", ns) == 1) {
+            snprintf(out, outsz, "%s", ns);
+            break;
+        }
+    }
+    fclose(f);
+}
+
+static int run_net_script(char *mode, size_t modesz) {
+    FILE *p;
+
+    if (access(NET_SCRIPT, X_OK) != 0) {
+        return 0;
+    }
+    p = popen(NET_SCRIPT, "r");
+    if (!p) {
+        return 0;
+    }
+    if (!fgets(mode, modesz, p)) {
+        pclose(p);
+        return 0;
+    }
+    mode[strcspn(mode, "\n")] = '\0';
+    if (pclose(p) != 0 || mode[0] == '\0') {
+        return 0;
+    }
+    return 1;
+}
+
 int main(int argc, char **argv) {
     // 1. Disable stdout buffering for immediate serial console output
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -720,20 +774,33 @@ int main(int argc, char **argv) {
               "  - sudo touch /etc/bishos/ssh.enabled          (start it)\n"
               "  - sudo rm /etc/bishos/ssh.enabled && sudo pkill sshd  (stop)\n");
 
-    // 9. Bring up networking. DHCP first: QEMU's SLIRP, VMware's NAT, and real
-    // routers all run DHCP servers, so one code path serves every host. Only
-    // if nothing answers (-n: give up, -t/-T: 3 tries x 2s) fall back to
-    // QEMU SLIRP's fixed layout so direct-kernel boots still work offline.
+    // 9. Bring up networking, from /etc/bishos/net-up if it is there.
+    //
+    // The addresses used to be decided here, which meant changing them was a
+    // recompile. They live in /etc/bishos/network now, and the script that
+    // applies them can be edited and re-run on the machine itself.
+    //
+    // What stays here is the same code as before, unchanged, as the last
+    // resort. If the script is missing, not executable, exits non-zero or
+    // says nothing, this runs instead -- so a mistake in a config file cannot
+    // cost you the network you would need to fetch the fix. That is worth the
+    // duplication.
+    char net_mode_buf[80];
     const char *net_mode;
-    system("ifconfig lo 127.0.0.1 up");
-    system("ifconfig eth0 up 2>/dev/null");
-    if (system("udhcpc -i eth0 -s /usr/share/udhcpc/default.script "
-               "-n -q -t 3 -T 2 >/dev/null 2>&1") == 0) {
-        net_mode = "DHCP";
+
+    if (run_net_script(net_mode_buf, sizeof net_mode_buf)) {
+        net_mode = net_mode_buf;
     } else {
-        system("ifconfig eth0 10.0.2.15 netmask 255.255.255.0 broadcast 10.0.2.255 up 2>/dev/null || true");
-        system("route add default gw 10.0.2.2 dev eth0 2>/dev/null || true");
-        net_mode = "static fallback (10.0.2.15)";
+        system("ifconfig lo 127.0.0.1 up");
+        system("ifconfig eth0 up 2>/dev/null");
+        if (system("udhcpc -i eth0 -s /usr/share/udhcpc/default.script "
+                   "-n -q -t 3 -T 2 >/dev/null 2>&1") == 0) {
+            net_mode = "DHCP (built-in defaults)";
+        } else {
+            system("ifconfig eth0 10.0.2.15 netmask 255.255.255.0 broadcast 10.0.2.255 up 2>/dev/null || true");
+            system("route add default gw 10.0.2.2 dev eth0 2>/dev/null || true");
+            net_mode = "static fallback 10.0.2.15 (built-in defaults)";
+        }
     }
 
     // 10. Shutdown signals. BusyBox poweroff/halt/reboot (without -f) do not
@@ -759,7 +826,16 @@ int main(int argc, char **argv) {
     printf("==========================================\n");
     printf("\n");
     printf("Storage:    %s\n", storage);
-    printf("Networking: %s (DNS: 8.8.8.8)\n", net_mode);
+    {
+        char ns[128];
+
+        first_nameserver(ns, sizeof ns);
+        if (ns[0] != '\0') {
+            printf("Networking: %s (DNS: %s)\n", net_mode, ns);
+        } else {
+            printf("Networking: %s (no nameserver configured)\n", net_mode);
+        }
+    }
     // Say what this boot actually offers. The two paths differ: a persistent
     // root has accounts and a login prompt, a RAM-only one deliberately has
     // neither, and telling an ISO user to log in would strand them.

@@ -117,7 +117,7 @@ rootfs:
 		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/ntp-step /work/$(ROOTFS_DIR)/etc/bishos/console && \
 		chmod 600 /work/$(ROOTFS_DIR)/etc/shadow && \
 		chmod 440 /work/$(ROOTFS_DIR)/etc/sudoers.d/wheel && \
-		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/sshd && \
+		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/sshd /work/$(ROOTFS_DIR)/etc/bishos/net-up && \
 		chmod 755 /work/$(ROOTFS_DIR)/init /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod 700 /work/$(ROOTFS_DIR)/root && \
 		chmod 1777 /work/$(ROOTFS_DIR)/tmp"

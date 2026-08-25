@@ -52,6 +52,13 @@ Ordered by how much it changes what the OS *is*, not by effort.
 - Finished ISOs in `output/<arch>/`, left alone by `make clean`
 - An unknown `ARCH` is rejected before anything runs, rather than falling
   through to x86_64 and failing much later inside the kernel's own Makefile
+- Network settings in `/etc/bishos/network`, applied by `/etc/bishos/net-up`,
+  editable and re-runnable on the machine instead of needing a rebuild. The
+  old compiled-in path stays in `init` as the fallback, so a broken config
+  cannot cost you the network you would need to fix it
+- DNS comes from the DHCP server rather than being overwritten with Google's
+  on every lease, so a router's own resolver -- and the local names only it
+  knows -- actually works
 
 ---
 
@@ -117,8 +124,6 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   fix itself has not been confirmed on the machine yet. The ghcr.io push has
   not been confirmed working either.
 - **Swap.** None configured.
-- **Network config in files.** Addresses and DNS are decided in `init.c`
-  rather than read from `/etc`.
 
 ---
 

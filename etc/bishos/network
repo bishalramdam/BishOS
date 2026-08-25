@@ -1,0 +1,30 @@
+# BishOS networking. Sourced by /etc/bishos/net-up, so this is shell syntax:
+# NAME=value, no spaces around the =.
+#
+# Every setting here has the same value compiled into init as a last resort.
+# If this file is deleted, renamed, or broken, the machine still comes up on
+# the network exactly as it did before the file existed -- that is deliberate,
+# because a typo in a config file should not cost you the ability to fetch the
+# fix.
+
+# Which interface to configure.
+IFACE=eth0
+
+# dhcp   ask the network and use what it answers (routers, QEMU, VMware NAT)
+# static skip asking and use the addresses below
+MODE=dhcp
+
+# Used when MODE=static, and when MODE=dhcp but nothing answers. The defaults
+# are QEMU's user-mode network, so a direct kernel boot with no DHCP server
+# still has a working address.
+FALLBACK_ADDRESS=10.0.2.15
+FALLBACK_NETMASK=255.255.255.0
+FALLBACK_GATEWAY=10.0.2.2
+
+# Nameservers to write when DHCP supplies none, or when USE_DHCP_DNS=no.
+FALLBACK_DNS="8.8.8.8 8.8.4.4"
+
+# yes  use the nameservers the DHCP server offers -- correct on a real
+#      network, where the router resolves local names that public DNS cannot
+# no   always use FALLBACK_DNS
+USE_DHCP_DNS=yes

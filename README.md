@@ -322,6 +322,16 @@ of whatever machine it is booted on.
         `SIGHUP` is what actually means "your terminal is going away"
 
 - [x] **Phase 12: A Screen That Stays On**
+  - [x] Network settings read from `/etc/bishos/network` and applied by
+        `/etc/bishos/net-up`, rather than being decided in `init.c` where
+        changing an address meant a recompile, a rebuilt initramfs and a
+        reboot. `sudo /etc/bishos/net-up` re-applies them on the spot
+  - [x] The old compiled-in path is still in `init`, used when the script is
+        missing, unrunnable or fails -- a typo in a config file should not
+        cost you the network you would need to fetch the fix
+  - [x] DNS comes from the DHCP server. The lease used to be discarded and
+        Google's resolvers written on every renewal, so a router's own DNS,
+        and every local name only it could resolve, simply did not exist
   - [x] `DRM_FBDEV_EMULATION`, `DRM_SIMPLEDRM` and `SYSFB_SIMPLEFB`. x86_64's
         defconfig builds `DRM_I915` in, and a DRM driver evicts the firmware
         framebuffer when it probes -- without these it then provides no
@@ -422,6 +432,44 @@ repository such as Python's `ssl` module, will use the shipped bundle.
 the initramfs is loaded into RAM in full on every boot, so every megabyte is
 a permanent cost, and a package manager whose installs vanish at the next
 reboot would be pointless.
+
+### Changing the network settings
+
+They live in `/etc/bishos/network`, which is shell syntax because
+`/etc/bishos/net-up` sources it:
+
+```sh
+IFACE=eth0
+MODE=dhcp                    # or: static
+FALLBACK_ADDRESS=10.0.2.15   # used by static, and when DHCP finds nobody
+FALLBACK_NETMASK=255.255.255.0
+FALLBACK_GATEWAY=10.0.2.2
+FALLBACK_DNS="8.8.8.8 8.8.4.4"
+USE_DHCP_DNS=yes             # no = ignore the DHCP server's nameservers
+```
+
+Re-apply without rebooting:
+
+```bash
+sudo /etc/bishos/net-up
+```
+
+That is the reason this is a script and not C. Networking is the part of a
+machine most likely to need changing on the machine itself, and the old
+arrangement -- addresses compiled into `init` -- meant every experiment cost a
+recompile, a rebuilt initramfs and a reboot.
+
+Every value here also exists as a default compiled into `init`. If this file
+is deleted or broken, the machine still comes up on the network exactly as it
+did before the file existed. That duplication is deliberate: a typo should not
+cost you the network you would need to fetch the fix.
+
+`init` prints what actually happened, including the nameserver it ended up
+with rather than the one it hoped for:
+
+```
+Networking: DHCP (DNS: 10.0.2.3)
+```
 
 ### When a program that is definitely there reports "not found"
 
