@@ -127,7 +127,10 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   terminal a shell can hand back; why a GPU driver loading can turn the
   screen off; static vs dynamic linking, the musl loader, and why "not found"
   names the wrong thing; that `chown` silently drops the setuid bit; that
-  musl has no utmp; and that a green CI run described a machine nobody had.
+  musl has no utmp; that a green CI run described a machine nobody had; and
+  that Docker Desktop remaps file ownership on macOS while Linux preserves it,
+  so a build that reads root-owned files works on the developer's machine and
+  silently drops them everywhere else.
 - **Multiple TTYs.** One console session only. Now actually possible: virtual
   terminals need a working display console, which is what the DRM fix
   provides, so this becomes a `console` line per `tty1`..`tty6` in the service

@@ -5,7 +5,7 @@ ARCH ?= x86_64
 
 # Single source of truth for the version: compiled into init's banner and
 # used in ISO filenames, so a release artifact always names what it is.
-VERSION = 0.11.0
+VERSION = 0.11.1
 
 # Alpine release the package manager installs from. Pinned like the kernel:
 # "latest-stable" would silently change the package set over time.
@@ -155,10 +155,48 @@ rootfs:
 			'https://dl-cdn.alpinelinux.org/alpine/$(ALPINE_RELEASE)/community' \
 			> /work/$(BUILD_DIR)/apkbundle/repositories"
 
-# 2. Package rootfs into initramfs.cpio.gz
+# 2. Package rootfs into initramfs.cpio.gz.
+#
+# Inside a container, as root, because the rootfs is built as root and some of
+# it is deliberately unreadable to anybody else: /etc/shadow is 600,
+# /etc/sudoers.d/wheel is 440, /root is 700. Running find|cpio on the host
+# meant whoever ran make had to be able to read those, and on Linux they
+# cannot -- Docker preserves real uids there, so an unprivileged CI runner got
+# "cpio: ./etc/shadow: Cannot open: Permission denied", cpio carried on, and
+# the build succeeded without them. On macOS the same command works because
+# Docker Desktop remaps ownership to the calling user, so the fault was
+# invisible on the machine it was developed on and shipped in every release
+# built anywhere else.
+#
+# The result was an image with no /etc/shadow, which is worse than it sounds:
+# nothing to hold the locked root entry, so the first-boot setup never
+# triggered and root ended up with an empty password.
+#
+# REQUIRED_IN_INITRAMFS is checked afterwards. cpio reports a file it cannot
+# read and then exits 0, so nothing but an explicit check turns that back into
+# a failure.
+REQUIRED_IN_INITRAMFS = init etc/shadow etc/passwd etc/group etc/sudoers.d/wheel \
+                        etc/bishos/services etc/bishos/console etc/bishos/install \
+                        bin/busybox
+
 initramfs:
 	mkdir -p $(BUILD_DIR)
-	(cd $(ROOTFS_DIR) && find . -print0 | cpio --null -ov --format=newc -R 0:0 | gzip -9 > ../initramfs.cpio.gz)
+	docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/work -w /work alpine:latest sh -c "\
+		apk add --no-cache cpio > /dev/null && \
+		cd /work/$(ROOTFS_DIR) && \
+		find . -print0 | cpio --null -o --format=newc -R 0:0 2>/dev/null \
+			| gzip -9 > /work/$(INITRAMFS)"
+	@docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/work -w /work alpine:latest sh -c "\
+		apk add --no-cache cpio > /dev/null && \
+		gzip -dc /work/$(INITRAMFS) | cpio -t 2>/dev/null | sed 's|^\./||' | sort -u > /tmp/have && \
+		missing=''; \
+		for f in $(REQUIRED_IN_INITRAMFS); do \
+			grep -qx \"\$$f\" /tmp/have || missing=\"\$$missing \$$f\"; \
+		done; \
+		if [ -n \"\$$missing\" ]; then \
+			echo \"initramfs is missing:\$$missing\" >&2; exit 1; \
+		fi; \
+		echo \"initramfs: \$$(wc -l < /tmp/have) entries, all required files present\""
 
 # 3. Compile Linux $(KERNEL_VERSION) from source. One shared source tree in the
 # bishos-kernel docker volume; each arch builds out-of-tree (O=) into its own
