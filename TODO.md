@@ -42,6 +42,13 @@ Ordered by how much it changes what the OS *is*, not by effort.
   shell can hand the terminal back instead of failing on the way out
 - `make disk-update`: refreshes `init` and `/etc` on an existing disk without
   touching accounts, home directories or installed packages
+- `bishos-install`: turns a live boot into an installed one, copying the
+  running system onto a BISHOS-labelled partition and giving it a package
+  manager from the bundle on the boot media
+- A console font large enough to read on a real monitor (`FONT_TER16x32`,
+  selected by `fbcon=font:TER16x32`)
+- init waits 45 seconds for a slow USB stick to enumerate rather than five,
+  printing progress, because a measured stick took 23 seconds to appear
 - `gcompat` on every persistent root, so prebuilt glibc binaries run instead
   of failing with `not found` for a file that is plainly there. Documented
   alongside `readelf -l`, which is how to recognise the failure elsewhere
@@ -125,10 +132,12 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   terminals need a working display console, which is what the DRM fix
   provides, so this becomes a `console` line per `tty1`..`tty6` in the service
   table rather than something the kernel cannot do.
-- **Untested paths.** The x86_64 ISO has been tried on real hardware and the
-  screen stayed black -- diagnosed as the DRM console gap and fixed, but the
-  fix itself has not been confirmed on the machine yet. The ghcr.io push has
-  not been confirmed working either.
+- **Untested paths.** The x86_64 ISO now boots on real hardware with a working
+  screen, networking and DNS -- confirmed on an Intel desktop. What has not
+  been confirmed there is persistence: that machine's USB stick fails its
+  first descriptor read at SuperSpeed and sometimes never enumerates at all,
+  which is a property of the stick rather than of BishOS. The ghcr.io push has
+  still not been confirmed working.
 - **Swap.** None configured.
 
 ---
