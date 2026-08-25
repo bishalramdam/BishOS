@@ -259,12 +259,7 @@ before falling back to RAM, printing its progress as it goes.
    Installed packages survive reboots, because the root is a real disk.
    Prebuilt ISOs for both architectures are attached to every
    [CI run](https://github.com/bishalramdam/BishOS/actions) and to
-   [tagged releases](https://github.com/bishalramdam/BishOS/releases), and
-   published to GitHub Packages as OCI artifacts:
-   ```bash
-   oras pull ghcr.io/bishalramdam/bishos:1.0.0-arm64
-   oras pull ghcr.io/bishalramdam/bishos:1.0.0-x86_64
-   ```
+   [tagged releases](https://github.com/bishalramdam/BishOS/releases).
    In VMware Fusion: New VM -> drag the ISO in -> "Other Linux 6.x 64-bit Arm".
    The same shell lands on the serial port in QEMU and on the screen in
    VMware -- the kernel gives /dev/console to the last console= that exists.
@@ -309,8 +304,8 @@ before falling back to RAM, printing its progress as it goes.
         processes, syncs, and calls `reboot(2)`
   - [x] One GRUB config for every architecture; x86_64 ISOs carry both a
         UEFI and a legacy-BIOS boot path
-  - [x] CI builds and boot-tests both ISOs on native runners, publishes
-        them to GitHub Packages (ghcr.io) and to tagged releases
+  - [x] CI builds and boot-tests both ISOs on native runners and attaches
+        them to tagged releases
   - [x] Semantic versioning: one `VERSION` names the ISO and the banner
 
 ---
@@ -468,6 +463,7 @@ before falling back to RAM, printing its progress as it goes.
 │   └── arm64/
 │       └── bishos-arm64_v1.0.0.iso
 ├── TODO.md             # What is done, what is declined and why, what is left
+├── LICENSE             # MIT
 └── README.md
 ```
 

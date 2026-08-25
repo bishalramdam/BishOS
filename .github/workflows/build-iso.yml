@@ -27,7 +27,6 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
-      packages: write
 
     steps:
       - uses: actions/checkout@v4
@@ -165,30 +164,6 @@ jobs:
             echo "::error::GRUB did not load the kernel from the ISO"; exit 1
           fi
           echo "Boot test passed: kernel+init verified directly, ISO verified through GRUB."
-
-      # GitHub Packages has no plain-file registry, so the ISO goes up as an
-      # OCI artifact -- which is what makes it appear under Packages. Pull it
-      # back with:
-      #   oras pull ghcr.io/<owner>/bishos:<version>-<arch>
-      - name: Publish ISO to GitHub Packages (ghcr.io)
-        if: github.event_name != 'pull_request'
-        uses: oras-project/setup-oras@v1
-
-      - name: Push OCI artifact
-        if: github.event_name != 'pull_request'
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          OWNER=$(echo "${{ github.repository_owner }}" | tr "[:upper:]" "[:lower:]")
-          echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
-          cd output/${{ matrix.arch }}
-          oras push \
-            "ghcr.io/$OWNER/bishos:${{ steps.ver.outputs.bishos }}-${{ matrix.arch }}" \
-            --artifact-type application/vnd.bishos.iso.v1 \
-            --annotation "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
-            --annotation "org.opencontainers.image.version=${{ steps.ver.outputs.bishos }}" \
-            --annotation "org.opencontainers.image.revision=${{ github.sha }}" \
-            "${{ steps.ver.outputs.iso }}:application/vnd.efi.iso"
 
       - uses: actions/upload-artifact@v4
         with:

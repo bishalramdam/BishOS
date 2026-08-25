@@ -119,8 +119,6 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   Worth more than size: the blank-screen bug lived in a 5,525-line `.config`
   that exists only inside a Docker volume, regenerated from upstream defaults
   every build and never seen. Tracking it would have made that bug a diff.
-- **LICENSE file.** Missing, and it matters the moment anyone reads the repo.
-  MIT or GPL-2.0 (the latter is thematic for a Linux project).
 - **README "what I learned".** There is now enough of this to be the most
   interesting page in the repo: PID 1 signal semantics; `TIOCSCTTY` and job
   control; the `console=` preference trap; why `/dev/console` is not a
@@ -135,11 +133,10 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   terminals need a working display console, which is what the DRM fix
   provides, so this becomes a `console` line per `tty1`..`tty6` in the service
   table rather than something the kernel cannot do.
-- **Untested paths.** Only one left: the ghcr.io push has never been confirmed
-  working. Everything else has now been seen on real hardware -- an Intel
-  desktop booting the x86_64 ISO from a USB stick, with a working screen,
-  networking, DHCP-supplied DNS, a persistent root on the stick's second
-  partition, and accounts created on first boot.
+- **Untested paths.** None. Everything the README claims has been seen on real
+  hardware -- an Intel desktop booting the x86_64 ISO from a USB stick, with a
+  working screen, networking, DHCP-supplied DNS, a persistent root on the
+  stick's second partition, and accounts created on first boot.
 - **Swap.** None configured.
 
 ---
