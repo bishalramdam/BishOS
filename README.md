@@ -137,7 +137,19 @@ of whatever machine it is booted on.
    and is compiled into init's banner, so a booted system always reports the
    version of the image it came from.
 
-5. **Install software** -- the persistent root ships with `apk`:
+5. **Run things at boot** -- init reads `/etc/bishos/services`:
+   ```
+   <name>  <action>  <command...>
+
+   respawn   start at boot, restart whenever it exits
+   once      run at boot, do not restart
+   console   respawn, and give it the controlling terminal
+   ```
+   A service that dies immediately is retried with a growing delay rather
+   than in a tight loop. With no table present, init falls back to a login
+   shell on the console, which is what it always did.
+
+6. **Install software** -- the persistent root ships with `apk`:
    ```bash
    apk add python3          # or gcc, git, vim, curl, tmux, ...
    python3 --version

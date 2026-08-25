@@ -1,0 +1,21 @@
+# BishOS service table.
+#
+#   <name>  <action>  <command...>
+#
+#   respawn  start at boot, restart whenever it exits
+#   once     run at boot, do not restart
+#   console  respawn, and give it the controlling terminal (job control)
+#
+# The command is split on whitespace only -- there is no quoting, and no
+# shell is involved unless you ask for one explicitly.
+#
+# A service that dies immediately is retried with a growing delay rather
+# than in a tight loop, so a broken command cannot peg the CPU.
+
+console   console   /bin/sh -l
+
+# Examples, once the packages are installed:
+#
+#   sshd    respawn   /usr/sbin/sshd -D -e
+#   ntpd    respawn   /usr/sbin/ntpd -n -d
+#   motd    once      /bin/sh /etc/bishos/first-boot.sh

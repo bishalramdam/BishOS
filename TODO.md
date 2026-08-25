@@ -20,12 +20,14 @@ Ordered by how much it changes what the OS *is*, not by effort.
 - CI builds, boot-tests, and publishes both ISOs on tags
 - Pseudo-terminals: `devpts` mounted at `/dev/pts` (plus `/dev/shm`), so ssh,
   tmux and screen have ptys to allocate
+- Service supervision: init reads `/etc/bishos/services` and starts, tracks
+  and restarts what it lists, with backoff for anything that dies at once
 
 ---
 
-## 1. The three real gaps
+## 1. The remaining real gap
 
-These are what separate "an OS I boot" from "a system someone could run".
+What separates "an OS I boot" from "a system someone could run".
 
 ### 1.1 No authentication
 `/etc/passwd` has `x` in the password field but **there is no `/etc/shadow`**,
@@ -36,27 +38,15 @@ drops straight into a root shell.
 - Create `/etc/shadow` with hashed passwords (`mkpasswd -m sha512`)
 - Decide whether init execs `getty` (which runs `login`) instead of `sh -l`
 
-### 1.2 No service management
-Init runs exactly one thing: a login shell, respawned forever. There is no
-way to say "start this at boot, restart it if it dies". `apk add nginx` and
-nothing launches it.
-
-- Read a table of programs to start (an `/etc/inittab`-like file)
-- Start each, track pids, restart on exit
-- The reap loop already handles the hard part -- it knows which child died
-
-This is the biggest architectural gap and the most interesting thing left:
-writing it *is* writing the thing systemd exists to be.
-
 ---
 
 ## 2. Robustness
 
 ### 2.1 No remote access
 Console only. `/dev/pts` now exists, so the remaining work is
-`apk add openssh`, generating host keys, and a way to start `sshd` at boot
-(1.2). Passwords (1.1) matter here too -- sshd will refuse to let root in
-without one.
+`apk add openssh`, generating host keys, and a `sshd respawn` line in the
+service table. Passwords (1.1) matter here too -- sshd will refuse to let
+root in without one.
 
 ### 2.2 Nothing ever runs fsck
 Clean shutdown remounts read-only, which is right, but a power loss or a
@@ -75,7 +65,8 @@ What is missing is *correction*: nothing keeps time in sync, so a long-lived
 VM drifts, and a snapshot resumed much later starts wrong. When it bites it
 looks like a CA problem rather than a clock problem.
 
-- `apk add chrony`, or busybox `ntpd`, once something can start services (1.2)
+- `apk add chrony`, or busybox `ntpd`, and a `respawn` line in the service
+  table -- there is now somewhere to put it
 
 ### 2.4 No logging
 `dmesg` is the only record and it does not survive a reboot. No syslog.
@@ -108,11 +99,11 @@ looks like a CA problem rather than a clock problem.
 
 ## Suggested order
 
-**1.2 → 1.1 → 2.1.** (`/dev/pts` is done.)
+**1.1 → 2.1.** (`/dev/pts` and the service table are done.)
 
-A minimal service table, then passwords, then sshd. That sequence turns
-BishOS from "an OS I boot and type into" into "a machine I can log into that
-runs things", and each step is an evening's work.
+Passwords, then sshd. Between them that turns BishOS from "an OS I boot and
+type into" into "a machine I can log into that runs things", and the pieces
+they need -- ptys and something to keep a daemon running -- now exist.
 
 Worth remembering: this is a learning project, and it is allowed to be
 finished. v0.4.0 boots on real hardware and installs Python. Everything above

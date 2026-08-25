@@ -11,6 +11,7 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <errno.h>
+#include <time.h>
 
 // Version comes from the Makefile (-DBISHOS_VERSION=0.3.0). The two-step
 // stringify is what turns that bare token into a string literal.
@@ -21,6 +22,14 @@
 #define VERSION_STRING(x) STRINGIFY(x)
 
 #define NEWROOT "/newroot"
+
+// Service table. Each line is:  <name> <respawn|once|console> <command...>
+// Comments start with #, and the command is split on whitespace only -- there
+// is no quoting, because a shell to do the quoting is exactly what an init
+// must not have to depend on.
+#define SERVICES_FILE "/etc/bishos/services"
+#define MAX_SERVICES 32
+#define MAX_ARGS 16
 
 // Only ever adopt a filesystem we made. mke2fs labels the disk image BISHOS,
 // and we check that label by reading the superblock directly -- never by
@@ -209,6 +218,226 @@ static void seed_file(const char *path, uid_t owner, const char *text) {
     close(fd);
 }
 
+
+enum action {
+    ACT_RESPAWN,  // restart whenever it exits
+    ACT_ONCE,     // run at boot, do not restart
+    ACT_CONSOLE   // respawn, and give it the controlling terminal
+};
+
+struct service {
+    char name[32];
+    enum action action;
+    char cmdline[224];       // storage the argv pointers point into
+    char *argv[MAX_ARGS];
+    pid_t pid;               // 0 when not running
+    time_t started;
+    int failures;
+    time_t retry_after;
+    int finished;            // an ACT_ONCE that has already run
+};
+
+static struct service services[MAX_SERVICES];
+static int service_count;
+
+// Exists only so SIGCHLD interrupts the sleep in the supervise loop: a dead
+// child is then noticed at once instead of up to a second later.
+static void handle_sigchld(int sig) {
+    (void) sig;
+}
+
+static void tokenize(struct service *s) {
+    char *p = s->cmdline;
+    int n = 0;
+
+    while (*p && n < MAX_ARGS - 1) {
+        while (*p == ' ' || *p == '\t') {
+            *p++ = '\0';
+        }
+        if (!*p) {
+            break;
+        }
+        s->argv[n++] = p;
+        while (*p && *p != ' ' && *p != '\t') {
+            p++;
+        }
+    }
+    s->argv[n] = NULL;
+}
+
+static void add_service(const char *name, enum action action, const char *cmd) {
+    struct service *s;
+
+    if (service_count >= MAX_SERVICES) {
+        printf("[BishOS] too many services, ignoring %s\n", name);
+        return;
+    }
+    s = &services[service_count];
+    memset(s, 0, sizeof *s);
+    snprintf(s->name, sizeof s->name, "%s", name);
+    s->action = action;
+    snprintf(s->cmdline, sizeof s->cmdline, "%s", cmd);
+    tokenize(s);
+    if (s->argv[0]) {
+        service_count++;
+    }
+}
+
+static void load_services(void) {
+    char line[320];
+    FILE *f = fopen(SERVICES_FILE, "r");
+
+    if (!f) {
+        // No table: behave exactly as BishOS did before services existed --
+        // a login shell on the console, respawned forever.
+        add_service("console", ACT_CONSOLE, "/bin/sh -l");
+        return;
+    }
+
+    while (fgets(line, sizeof line, f)) {
+        char name[32], action[16];
+        char *p = line;
+        int off = 0;
+        enum action act;
+
+        line[strcspn(line, "\n")] = '\0';
+        while (*p == ' ' || *p == '\t') {
+            p++;
+        }
+        if (*p == '#' || *p == '\0') {
+            continue;
+        }
+        if (sscanf(p, "%31s %15s %n", name, action, &off) < 2 || off == 0) {
+            printf("[BishOS] ignoring malformed service line: %s\n", p);
+            continue;
+        }
+
+        if (strcmp(action, "respawn") == 0) {
+            act = ACT_RESPAWN;
+        } else if (strcmp(action, "once") == 0) {
+            act = ACT_ONCE;
+        } else if (strcmp(action, "console") == 0) {
+            act = ACT_CONSOLE;
+        } else {
+            printf("[BishOS] service %s: unknown action '%s'\n", name, action);
+            continue;
+        }
+        add_service(name, act, p + off);
+    }
+    fclose(f);
+
+    if (service_count == 0) {
+        add_service("console", ACT_CONSOLE, "/bin/sh -l");
+    }
+}
+
+static void start_service(struct service *s) {
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        perror("[BishOS] fork");
+        s->retry_after = time(NULL) + 2;
+        return;
+    }
+
+    if (pid == 0) {
+        // Every service gets its own session, so a Ctrl-C aimed at the shell
+        // cannot reach a daemon. Only the console service claims the
+        // terminal, which is what gives it job control.
+        setsid();
+
+        if (s->action == ACT_CONSOLE) {
+            int fd = open("/dev/console", O_RDWR);
+
+            if (fd < 0) {
+                fd = open("/dev/ttyS0", O_RDWR);
+            }
+            if (fd >= 0) {
+                ioctl(fd, TIOCSCTTY, 1);
+                dup2(fd, 0);
+                dup2(fd, 1);
+                dup2(fd, 2);
+                if (fd > 2) {
+                    close(fd);
+                }
+            }
+        }
+
+        execv(s->argv[0], s->argv);
+
+        // Only reached if exec failed. For the console, fall back to busybox,
+        // which is static and always present, before giving up.
+        if (s->action == ACT_CONSOLE) {
+            char *bb[] = {"/bin/busybox", "sh", "-l", NULL};
+            execv("/bin/busybox", bb);
+        }
+        fprintf(stderr, "[BishOS] %s: cannot execute %s: %s\n",
+                s->name, s->argv[0], strerror(errno));
+        _exit(127);
+    }
+
+    s->pid = pid;
+    s->started = time(NULL);
+}
+
+// Start anything that should be running and is not.
+static void start_due_services(void) {
+    time_t now = time(NULL);
+
+    for (int i = 0; i < service_count; i++) {
+        struct service *s = &services[i];
+
+        if (s->pid == 0 && !s->finished && now >= s->retry_after) {
+            start_service(s);
+        }
+    }
+}
+
+// A child died. If it is one of ours, decide whether to start it again.
+static void service_exited(pid_t pid, int status) {
+    time_t now = time(NULL);
+
+    for (int i = 0; i < service_count; i++) {
+        struct service *s = &services[i];
+
+        if (s->pid != pid) {
+            continue;
+        }
+        s->pid = 0;
+
+        if (s->action == ACT_ONCE) {
+            s->finished = 1;
+            return;
+        }
+
+        // Back off when a service dies almost immediately, or a broken
+        // command would be re-exec'd thousands of times a second.
+        if (now - s->started < 2) {
+            int delay;
+
+            s->failures++;
+            delay = s->failures * 2;
+            if (delay > 30) {
+                delay = 30;
+            }
+            s->retry_after = now + delay;
+            printf("[BishOS] %s died immediately (status %d), retrying in %ds\n",
+                   s->name, WEXITSTATUS(status), delay);
+        } else {
+            s->failures = 0;
+            s->retry_after = 0;
+            if (s->action == ACT_CONSOLE) {
+                printf("\n[BishOS] Shell session ended. Respawning shell...\n\n");
+            } else {
+                printf("[BishOS] %s exited, restarting\n", s->name);
+            }
+        }
+        return;
+    }
+    // Not one of ours: an orphan the kernel re-parented to us. Reaping it was
+    // the entire job.
+}
+
 int main(int argc, char **argv) {
     // 1. Disable stdout buffering for immediate serial console output
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -312,6 +541,10 @@ int main(int argc, char **argv) {
     sigaction(SIGUSR1, &sa, NULL);
     sigaction(SIGUSR2, &sa, NULL);
 
+    // SIGCHLD is handled only so that it interrupts sleep() below.
+    sa.sa_handler = handle_sigchld;
+    sigaction(SIGCHLD, &sa, NULL);
+
     // 10. Welcome banner
     printf("\n");
     printf("==========================================\n");
@@ -324,70 +557,35 @@ int main(int argc, char **argv) {
     printf("User accounts: root, bishal (switch with: 'su - bishal')\n");
     printf("To cleanly shut down the OS, run: poweroff\n\n");
 
-    // 11. PID 1 loop: launch login shell with controlling TTY
+    // 11. Supervise. Load the service table, start everything in it, then
+    // reap forever: a dead child is either a service to restart or an orphan
+    // the kernel re-parented to us, and one loop handles both.
+    load_services();
+    printf("Services:   %d configured\n\n", service_count);
+
     while (1) {
-        pid_t pid = fork();
+        int status;
+        pid_t dead;
 
-        if (pid == 0) {
-            // Create a new process session
-            setsid();
-
-            // Attach the kernel's console as the controlling terminal (TIOCSCTTY).
-            // /dev/console follows the console= cmdline, so one image serves serial and VGA.
-            int fd = open("/dev/console", O_RDWR);
-            if (fd < 0) {
-                fd = open("/dev/ttyS0", O_RDWR);
-            }
-
-            if (fd >= 0) {
-                ioctl(fd, TIOCSCTTY, 1);
-                dup2(fd, 0); // stdin
-                dup2(fd, 1); // stdout
-                dup2(fd, 2); // stderr
-                if (fd > 2) {
-                    close(fd);
-                }
-            }
-
-            // Execute login shell (-l flag executes /etc/profile)
-            char *sh_argv[] = {"/bin/sh", "-l", NULL};
-            execv("/bin/sh", sh_argv);
-
-            // Fallback
-            char *bb_argv[] = {"/bin/busybox", "sh", "-l", NULL};
-            execv("/bin/busybox", bb_argv);
-
-            perror("[BishOS] Failed to execute shell");
-            exit(1);
-        } else if (pid > 0) {
-            // Parent (PID 1): reap EVERY child, since orphans are re-parented to us.
-            // Only the death of our own shell breaks out to respawn it.
-            int status;
-            while (1) {
-                if (shutdown_signal) {
-                    do_shutdown(shutdown_signal);
-                }
-
-                pid_t dead = waitpid(-1, &status, 0);
-
-                if (dead == pid) {
-                    break; // our login shell exited: respawn it
-                }
-
-                if (dead < 0) {
-                    if (errno == EINTR) {
-                        continue; // signal arrived: loop re-checks shutdown_signal
-                    }
-                    break; // ECHILD or unexpected error: nothing left to reap
-                }
-
-                // Any other pid was an orphan we just buried: keep waiting
-            }
-            printf("\n[BishOS] Shell session ended. Respawning shell...\n\n");
-        } else {
-            perror("[BishOS] fork failed");
-            sleep(2);
+        if (shutdown_signal) {
+            do_shutdown(shutdown_signal);
         }
+
+        start_due_services();
+
+        dead = waitpid(-1, &status, WNOHANG);
+        if (dead > 0) {
+            service_exited(dead, status);
+            continue;   // there may be more to reap before sleeping
+        }
+        if (dead < 0 && errno != ECHILD && errno != EINTR) {
+            perror("[BishOS] waitpid");
+        }
+
+        // Wait for something to happen. SIGCHLD cuts this short, so a dead
+        // child is handled at once; the timeout is what lets a backed-off
+        // restart eventually come due.
+        sleep(1);
     }
 
     return 0;
