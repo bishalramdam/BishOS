@@ -81,7 +81,7 @@ CONSOLE = ttyS0
 NIC_MODEL = e1000
 endif
 
-.PHONY: all clean rootfs initramfs kernel run iso disk disk-reset disk-grow disk-update print-kernel-version print-version
+.PHONY: all clean rootfs initramfs kernel run iso disk disk-reset disk-grow disk-update clean-output print-kernel-version print-version
 
 all: kernel rootfs initramfs
 
@@ -250,17 +250,24 @@ disk-reset:
 # architecture; only the kernel binary differs, and it is staged under the
 # same name (/boot/vmlinuz). grub-mkrescue emits a UEFI boot path for both
 # arches, and on x86_64 additionally a legacy-BIOS one in the same image.
-ISO = $(BUILD_DIR)/bishos-$(ARCH)_v$(VERSION).iso
+# Finished ISOs go to output/, not build/. build/ is scratch -- staging trees,
+# object files, disk images -- and make clean is entitled to delete all of it.
+# The ISO is the one thing here anyone takes away, so it lives somewhere it
+# can be found without knowing how the build is laid out. The filename already
+# carries the architecture and version, so both arches share the directory.
+OUTPUT_DIR = output
+ISO = $(OUTPUT_DIR)/bishos-$(ARCH)_v$(VERSION).iso
 
 iso: all
 	rm -rf $(BUILD_DIR)/iso
-	mkdir -p $(BUILD_DIR)/iso/boot/grub
+	mkdir -p $(BUILD_DIR)/iso/boot/grub $(OUTPUT_DIR)
 	cp $(KERNEL) $(BUILD_DIR)/iso/boot/vmlinuz
 	cp $(INITRAMFS) $(BUILD_DIR)/iso/boot/
 	cp grub/grub.cfg $(BUILD_DIR)/iso/boot/grub/
 	docker build --platform $(DOCKER_PLATFORM) -q -f Dockerfile.iso -t bishos-iso:$(ARCH) .
 	docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/src bishos-iso:$(ARCH) \
-		sh -c "cd /src/$(BUILD_DIR) && grub-mkrescue -o bishos-$(ARCH)_v$(VERSION).iso iso/"
+		sh -c "cd /src && grub-mkrescue -o $(ISO) $(BUILD_DIR)/iso/"
+	@echo "-> $(ISO)"
 
 # Host port forwarded to the guest's sshd. QEMU's user-mode networking gives
 # the guest outbound access but no inbound route, so without this the machine
@@ -287,5 +294,11 @@ print-kernel-version:
 print-version:
 	@echo $(VERSION)
 
+# Scratch only. Finished ISOs in output/ are left alone -- use clean-output
+# for those, so a rebuild never silently throws away something already burnt
+# to a stick or handed to somebody.
 clean:
 	rm -rf build
+
+clean-output:
+	rm -rf $(OUTPUT_DIR)

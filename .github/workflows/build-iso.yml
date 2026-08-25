@@ -79,9 +79,9 @@ jobs:
 
       - name: Verify ISO is bootable
         run: |
-          ls -lh build/${{ matrix.arch }}/${{ steps.ver.outputs.iso }}
+          ls -lh output/${{ steps.ver.outputs.iso }}
           docker run --rm -v "$PWD":/src bishos-iso:${{ matrix.arch }} \
-            xorriso -indev /src/build/${{ matrix.arch }}/${{ steps.ver.outputs.iso }} \
+            xorriso -indev /src/output/${{ steps.ver.outputs.iso }} \
                     -report_el_torito plain
 
       # Two-phase boot test.
@@ -98,7 +98,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           ARCH=${{ matrix.arch }}
-          ISO=build/$ARCH/${{ steps.ver.outputs.iso }}
+          ISO=output/${{ steps.ver.outputs.iso }}
 
           if [ "$ARCH" = "arm64" ]; then
             sudo apt-get install -y -qq qemu-system-arm qemu-efi-aarch64 > /dev/null 2>&1
@@ -181,7 +181,7 @@ jobs:
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr "[:upper:]" "[:lower:]")
           echo "$GHCR_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
-          cd build/${{ matrix.arch }}
+          cd output
           oras push \
             "ghcr.io/$OWNER/bishos:${{ steps.ver.outputs.bishos }}-${{ matrix.arch }}" \
             --artifact-type application/vnd.bishos.iso.v1 \
@@ -193,7 +193,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: bishos-${{ steps.ver.outputs.bishos }}-${{ matrix.arch }}-iso
-          path: build/${{ matrix.arch }}/${{ steps.ver.outputs.iso }}
+          path: output/${{ steps.ver.outputs.iso }}
           retention-days: 30
 
   # Tagging v* publishes both ISOs as a GitHub Release.

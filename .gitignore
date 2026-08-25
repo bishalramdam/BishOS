@@ -1,5 +1,6 @@
 # Build artifacts
 build/
+output/
 *.cpio.gz
 *.iso
 # ...but Dockerfile.iso is a build file, not a disc image
