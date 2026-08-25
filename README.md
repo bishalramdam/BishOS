@@ -135,25 +135,57 @@ Builds for **two architectures** from the same source:
 
 init looks for its root on *any* block device -- whole disks and partitions
 alike -- and adopts the first ext4 filesystem labelled `BISHOS`. That is the
-whole mechanism, so a live USB gains persistence by giving it such a
-partition. On a Linux machine, with `/dev/sdX` the stick:
+whole mechanism, so a USB stick gains persistence by giving it such a
+partition.
+
+Do not `dd` the ISO and try to add a partition afterwards. That is documented
+widely and does not work here: `grub-mkrescue` leaves a GPT whose secondary
+table overlaps the last partition, so `sgdisk -e` aborts with
+`Aborting write of new partition table` and the disk keeps reporting itself as
+27 MB. `sgdisk -n 0:0:0` then makes a 1.5 KiB partition in a gap rather than a
+28 GB one at the end.
+
+Install to it properly instead. On Linux, with `/dev/sdX` the stick -- check
+with `lsblk -o NAME,SIZE,MODEL,TRAN` first, because getting this wrong
+destroys the machine you are typing on:
 
 ```bash
-sudo wipefs -a /dev/sdX                      # clear old signatures
-sudo dd if=bishos-x86_64_v0.10.0.iso of=/dev/sdX bs=4M conv=fsync
-sudo sgdisk -e /dev/sdX                      # see below
-sudo sgdisk -n 0:0:0 -t 0:8300 /dev/sdX      # claim the free space
-sudo mkfs.ext4 -L BISHOS /dev/sdX3           # check the real partition name first
+sudo wipefs -a /dev/sdX
+sudo sgdisk -Z /dev/sdX
+sudo sgdisk -n 1:0:+512M -t 1:ef00 -c 1:BISHOSEFI \
+            -n 2:0:0     -t 2:8300 -c 2:BISHOS /dev/sdX
+sudo partprobe /dev/sdX
+sudo mkfs.vfat -F32 -n BISHOSEFI /dev/sdX1
+sudo mkfs.ext4 -L BISHOS /dev/sdX2
 ```
 
-`sgdisk -e` is the non-obvious step. The ISO's GPT declares the disk to end
-where the image ends (~49 MB), so the rest of the stick sits outside the
-partition table and no tool offers it as free space until the backup header
-is moved to the true end of the device.
+No bootloader needs installing: the ISO already contains one, and it is the
+same binary that draws the menu when the ISO is booted directly. Copy the
+whole thing onto the EFI partition -- 27 MB into 512 MB, and FAT is
+case-insensitive, so the ISO's `/efi/boot/bootx64.efi` lands exactly where
+firmware looks for `/EFI/BOOT/BOOTX64.EFI` on a removable device:
+
+```bash
+sudo mkdir -p /mnt/iso /mnt/esp
+sudo mount -o loop,ro bishos-x86_64_v0.10.1.iso /mnt/iso
+sudo mount /dev/sdX1 /mnt/esp
+sudo cp -r /mnt/iso/. /mnt/esp/
+sudo umount /mnt/iso /mnt/esp && sync
+```
 
 The label must be exactly `BISHOS` -- it is compared with `strcmp`. Anything
 else is ignored, which is what stops BishOS from adopting the internal drive
-of whatever machine it is booted on.
+of whatever machine it is booted on. Check it with
+`sudo blkid -s LABEL -o value /dev/sdX2 | cat -A`; a trailing space will show
+up as `BISHOS $` and will not match.
+
+Secure Boot must be off, since this GRUB is unsigned.
+
+USB storage can take a surprisingly long time to appear. One stick failed its
+first descriptor read at SuperSpeed, retried, and did not present a block
+device until 23 seconds into the boot -- so init waits 45 seconds for a root
+before falling back to RAM, printing its progress as it goes.
+`bishos.rootwait=N` on the kernel command line changes that.
 
    The VM gets 2 GB of RAM by default (`make MEMORY=4G run` to change it).
    That figure also sizes `/tmp`: it is a tmpfs, so it defaults to half of
@@ -165,8 +197,8 @@ of whatever machine it is booted on.
 4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
    the same `grub.cfg`; only the kernel binary differs:
    ```bash
-   make ARCH=arm64 iso   # -> output/arm64/bishos-arm64_v0.10.0.iso   (UEFI)
-   make iso              # -> output/x86_64/bishos-x86_64_v0.10.0.iso (UEFI + BIOS)
+   make ARCH=arm64 iso   # -> output/arm64/bishos-arm64_v0.10.1.iso   (UEFI)
+   make iso              # -> output/x86_64/bishos-x86_64_v0.10.1.iso (UEFI + BIOS)
    ```
    `VERSION` in the Makefile is the single source of truth: it names the ISO
    and is compiled into init's banner, so a booted system always reports the
@@ -205,8 +237,8 @@ of whatever machine it is booted on.
    [tagged releases](https://github.com/bishalramdam/BishOS/releases), and
    published to GitHub Packages as OCI artifacts:
    ```bash
-   oras pull ghcr.io/bishalramdam/bishos:0.10.0-arm64
-   oras pull ghcr.io/bishalramdam/bishos:0.10.0-x86_64
+   oras pull ghcr.io/bishalramdam/bishos:0.10.1-arm64
+   oras pull ghcr.io/bishalramdam/bishos:0.10.1-x86_64
    ```
    In VMware Fusion: New VM -> drag the ISO in -> "Other Linux 6.x 64-bit Arm".
    The same shell lands on the serial port in QEMU and on the screen in
@@ -407,9 +439,9 @@ of whatever machine it is booted on.
 │       └── bishos-disk.img  # Persistent ext4 root (survives rebuilds)
 ├── output/             # Finished ISOs, gitignored. make clean leaves these
 │   ├── x86_64/
-│   │   └── bishos-x86_64_v0.10.0.iso
+│   │   └── bishos-x86_64_v0.10.1.iso
 │   └── arm64/
-│       └── bishos-arm64_v0.10.0.iso
+│       └── bishos-arm64_v0.10.1.iso
 ├── TODO.md             # What is done, what is declined and why, what is left
 └── README.md
 ```
