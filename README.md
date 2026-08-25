@@ -198,6 +198,8 @@ of whatever machine it is booted on.
         signing keys so downloads are verified, not blindly trusted
   - [x] Repositories pinned to a specific Alpine release
   - [x] CA certificate bundle shipped, so HTTPS can actually be verified
+  - [x] Clock kept correct by `ntpd`, which matters because TLS validates
+        certificate *dates* -- a wrong clock fails looking like a CA problem
   - [x] Installs dynamically-linked software: the first package pulls in
         `musl`, which provides the loader the whole repository needs
 - [x] **Phase 7: Persistent Root Filesystem**

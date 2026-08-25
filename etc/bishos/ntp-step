@@ -1,0 +1,13 @@
+#!/bin/sh
+# Called by busybox ntpd with $1 = step | periodic | stratum | unsync.
+#
+# Writing the corrected time back to the hardware clock is the point: the
+# kernel reads the RTC at boot, long before any network exists, so a machine
+# that has been off for months starts with a good clock instead of waiting
+# for ntpd. Without this the correction only ever lives in RAM.
+case "$1" in
+    step|periodic)
+        hwclock -w 2>/dev/null || true
+        ;;
+esac
+exit 0

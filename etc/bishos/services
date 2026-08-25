@@ -14,6 +14,13 @@
 
 console   console   /bin/sh -l
 
+# Keep the clock correct. The kernel sets the time from the hardware clock at
+# boot, but nothing corrects the drift after that -- and a wrong clock breaks
+# TLS in a way that looks like a certificate problem rather than a time one.
+# -n keeps ntpd in the foreground so this supervisor can see it exit, and -S
+# runs a script that writes the corrected time back to the hardware clock.
+ntpd      respawn   /sbin/ntpd -n -S /etc/bishos/ntp-step -p 0.pool.ntp.org -p 1.pool.ntp.org
+
 # Examples, once the packages are installed:
 #
 #   sshd    respawn   /usr/sbin/sshd -D -e

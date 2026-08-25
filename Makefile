@@ -87,6 +87,7 @@ rootfs:
 		find /work/$(ROOTFS_DIR) -type d -exec chmod 755 {} + && \
 		find /work/$(ROOTFS_DIR)/etc -type f -exec chmod 644 {} + && \
 		chmod 755 /work/$(ROOTFS_DIR)/etc/udhcpc/default.script /work/$(ROOTFS_DIR)/usr/share/udhcpc/default.script && \
+		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/ntp-step && \
 		chmod 755 /work/$(ROOTFS_DIR)/init /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod 700 /work/$(ROOTFS_DIR)/root && \
 		chmod 1777 /work/$(ROOTFS_DIR)/tmp"

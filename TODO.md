@@ -22,6 +22,8 @@ Ordered by how much it changes what the OS *is*, not by effort.
   tmux and screen have ptys to allocate
 - Service supervision: init reads `/etc/bishos/services` and starts, tracks
   and restarts what it lists, with backoff for anything that dies at once
+- Clock correction: busybox `ntpd` runs as a service and writes the corrected
+  time back to the hardware clock, so the next boot starts right
 
 ---
 
@@ -54,19 +56,6 @@ killed QEMU leaves ext4 dirty and nothing repairs it. Eventually a root that
 will not mount.
 
 - Run `e2fsck -p` on the root device from the initramfs, before mounting
-
-### 2.3 The clock drifts, and nothing corrects it
-Not as bad as first assumed: the kernel already sets the time from the
-hardware clock at boot (`CONFIG_RTC_HCTOSYS` + PL031 on arm64, CMOS on
-x86_64), which is why TLS works at all -- certificate validation checks
-dates, so it would fail outright on a badly wrong clock.
-
-What is missing is *correction*: nothing keeps time in sync, so a long-lived
-VM drifts, and a snapshot resumed much later starts wrong. When it bites it
-looks like a CA problem rather than a clock problem.
-
-- `apk add chrony`, or busybox `ntpd`, and a `respawn` line in the service
-  table -- there is now somewhere to put it
 
 ### 2.4 No logging
 `dmesg` is the only record and it does not survive a reboot. No syslog.
