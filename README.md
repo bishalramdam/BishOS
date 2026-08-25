@@ -444,6 +444,8 @@ before falling back to RAM, printing its progress as it goes.
 │   ├── resolv.conf     # Fallback nameservers; DHCP overwrites this per lease
 │   └── udhcpc/
 │       └── default.script # DHCP event handler: address, route, nameservers
+├── tools/
+│   └── centre-tilde.py # Moves a console font's ~ down into the letter body
 ├── src/
 │   └── init.c          # PID 1: pseudo-filesystems, switch_root, service
 │                       # supervision, log collection, shutdown
@@ -554,6 +556,46 @@ with rather than the one it hoped for:
 ```
 Networking: DHCP (DNS: 10.0.2.3)
 ```
+
+### The console font, and where the tilde sits
+
+Console fonts draw `~` near the top of the cell. That is typographically
+right -- the tilde began as a spacing diacritic, the mark over the n in
+"senor" -- but in a shell prompt, where `~` means your home directory and
+sits beside ordinary letters, it reads as though it has floated off.
+
+No stock font avoids it at a readable size. Measuring the tilde's vertical
+centre across all 374 fonts in `kbd-misc` and `font-terminus`: the
+best-placed (0.44, near centred) are all 8x16, far too small on a real
+monitor, and every font 20px or taller sits between 0.22 and 0.27. So pick
+whichever you prefer:
+
+```bash
+sudo apk add kbd kbd-misc font-terminus
+sudo setfont /usr/share/consolefonts/solar24x32.psfu.gz   # 24x32, best stock at 0.27
+```
+
+or move the glyph, which is the only way to get both size and placement:
+
+```bash
+python3 tools/centre-tilde.py \
+    /usr/share/consolefonts/ter-132b.psf.gz ter-132b-centred.psf.gz 9
+sudo cp ter-132b-centred.psf.gz /usr/local/share/consolefonts/
+```
+
+`/usr/local/share` rather than `/usr/share/consolefonts`, which belongs to
+the package and would lose the file on upgrade.
+
+Either way, load it from the service table so it applies before the login
+prompt rather than after it:
+
+```
+consolefont  once  /usr/sbin/setfont /usr/local/share/consolefonts/ter-132b-centred.psf.gz
+```
+
+`once` runs it at boot and does not restart it. The kernel's own
+`fbcon=font:TER16x32` still draws everything before userspace exists, so
+early boot messages keep the built-in font whatever this says.
 
 ### When a program that is definitely there reports "not found"
 
