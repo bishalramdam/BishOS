@@ -111,15 +111,16 @@ Nothing here changes what the OS is. It is a list of small good ideas.
 
 ## Suggested order
 
-**Nothing, in the sense that matters.** There is no open work in section 1:
-the machine boots, knows who you are, can be reached over the network,
-supervises its services and keeps a record of what they said. Everything left
-is polish, and a LICENSE file is the cheapest thing on that list.
+**Nothing, in the sense that matters.** Section 1 holds only things looked at
+and decided against -- there is no open work left in it. The machine boots,
+knows who you are, can be reached over the network when asked, supervises its
+services and keeps a record of what they said. Everything remaining is
+polish, and a LICENSE file is the cheapest thing on that list.
 
 The one real gap is not code. The x86_64 ISO has never booted on real
-hardware or from a USB stick, and three tagged releases now carry that
-untested path -- it is the only claim the README makes that has never been
-checked. Everything else here is optional; that one is a promise outstanding.
+hardware or from a USB stick, and every tagged release carries that untested
+path -- it is the only claim the README makes that has never been checked.
+Everything else here is optional; that one is a promise outstanding.
 
 Worth remembering: this is a learning project, and it is allowed to be
 finished. It boots on real hardware, installs Python, supervises services,
