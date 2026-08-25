@@ -42,9 +42,9 @@ Ordered by how much it changes what the OS *is*, not by effort.
   shell can hand the terminal back instead of failing on the way out
 - `make disk-update`: refreshes `init` and `/etc` on an existing disk without
   touching accounts, home directories or installed packages
-- Documented why a prebuilt glibc binary reports `not found` on a musl system
-  when the file is plainly there, how to confirm it with `readelf -l`, and
-  that `apk add gcompat` is the fix
+- `gcompat` on every persistent root, so prebuilt glibc binaries run instead
+  of failing with `not found` for a file that is plainly there. Documented
+  alongside `readelf -l`, which is how to recognise the failure elsewhere
 
 ---
 

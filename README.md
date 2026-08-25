@@ -449,8 +449,15 @@ $ ./hello
 hello from a glibc binary
 ```
 
-It is not installed by default. It is a translation layer rather than glibc
-itself, so a binary can start and then misbehave in ways a plain failure to
-start would not have hidden -- worth reaching for when something needs it,
-rather than having it underneath everything by default. Anything built from
-the Alpine repository never needs it: those are musl binaries already.
+`gcompat` ships on every persistent root, so in practice the failure above is
+one you will only meet on a disk built before this or on a RAM-only boot. It
+costs 131 KB against a 5 GB filesystem, and the failure it prevents is the
+single most misleading message in Unix -- a bad trade to make anyone debug
+twice.
+
+Worth knowing what it is, though: a translation layer that maps glibc symbols
+onto musl, not glibc itself. Most things work; something unusual can start
+and then misbehave in a way that failing outright would not have hidden. If a
+prebuilt binary behaves strangely rather than refusing to run, gcompat
+sitting underneath it is worth suspecting early. Anything from the Alpine
+repository is unaffected -- those are musl binaries and never touch it.

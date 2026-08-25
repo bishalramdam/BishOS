@@ -168,7 +168,7 @@ disk: rootfs
 				'https://dl-cdn.alpinelinux.org/alpine/$(ALPINE_RELEASE)/community' \
 				> /diskroot/etc/apk/repositories && \
 			rm -rf /diskroot/etc/ssl && \
-			/sbin/apk.static --root /diskroot --initdb add alpine-baselayout-data ca-certificates-bundle sudo openssh-server > /dev/null && \
+			/sbin/apk.static --root /diskroot --initdb add alpine-baselayout-data ca-certificates-bundle sudo openssh-server gcompat > /dev/null && \
 			chown -R 0:0 /diskroot && \
 			chmod 1777 /diskroot/tmp && chmod 700 /diskroot/root && \
 			chmod 4755 /diskroot/usr/bin/sudo && \
