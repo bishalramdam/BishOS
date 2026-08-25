@@ -1,0 +1,133 @@
+#!/bin/sh
+# Install BishOS onto a persistent root.
+#
+# The ISO boots into RAM. This copies that running system onto a partition
+# labelled BISHOS so the next boot finds it, switches into it, and keeps
+# whatever you do there.
+#
+# Run it from a live boot:   bishos-install [/dev/sdX2]
+# With no argument it looks for the BISHOS partition itself.
+
+set -e
+
+MNT=/tmp/bishos-target
+BOOTMNT=/tmp/bishos-boot
+
+[ "$(id -u)" = "0" ] || { echo "install: must be root"; exit 1; }
+
+if [ "$BISHOS_PERSISTENT" = "1" ]; then
+    echo "install: already running from a persistent root."
+    echo "install: boot the ISO first -- installing from a disk onto itself"
+    echo "install: is not something this script tries to be clever about."
+    exit 1
+fi
+
+# --- find the target -------------------------------------------------------
+TARGET="$1"
+if [ -z "$TARGET" ]; then
+    TARGET=$(blkid 2>/dev/null | grep 'LABEL="BISHOS"' | head -1 | cut -d: -f1)
+fi
+if [ -z "$TARGET" ] || [ ! -b "$TARGET" ]; then
+    echo "install: no partition labelled BISHOS found, and none given."
+    echo
+    echo "Make one first, from another machine:"
+    echo "    sudo mkfs.ext4 -L BISHOS /dev/sdX2"
+    echo
+    echo "The label is compared exactly; a trailing space will not match."
+    exit 1
+fi
+
+echo "Target: $TARGET"
+echo
+
+# --- confirm, because this overwrites it -----------------------------------
+mkdir -p "$MNT"
+mount "$TARGET" "$MNT"
+
+if [ -e "$MNT/sbin/init" ] && [ "$2" != "--force" ]; then
+    echo "install: $TARGET already has a system on it."
+    echo "install: re-run with --force to overwrite it."
+    umount "$MNT"
+    exit 1
+fi
+
+echo "This will replace everything on $TARGET."
+printf "Type yes to continue: "
+read -r ANSWER
+[ "$ANSWER" = "yes" ] || { echo "Nothing done."; umount "$MNT"; exit 1; }
+echo
+
+# --- copy the running system ------------------------------------------------
+# tar rather than cp -a: it gets symlinks, permissions and hardlinks right in
+# one pass, and /proc, /sys, /dev and /tmp are deliberately not in the list --
+# they are kernel filesystems that init mounts fresh on every boot.
+echo "Copying the system..."
+tar -C / -cf - bin sbin etc root home usr var 2>/dev/null | tar -C "$MNT" -xf -
+
+mkdir -p "$MNT/proc" "$MNT/sys" "$MNT/dev" "$MNT/tmp" "$MNT/var/log"
+chmod 1777 "$MNT/tmp"
+chmod 700 "$MNT/root"
+
+# The one thing a plain copy gets wrong. In the initramfs /sbin/init is a
+# busybox symlink -- busybox has an init applet -- while the real BishOS init
+# is /init. Copied naively, the new root would pass the "has /sbin/init" check
+# and then boot busybox's init instead, which looks like it worked and is not
+# the system you built.
+rm -f "$MNT/sbin/init"
+cp /init "$MNT/sbin/init"
+chmod 755 "$MNT/sbin/init"
+echo "Installed BishOS init at /sbin/init."
+
+# --- the package manager, from the boot media -------------------------------
+# apk.static is 5MB and lives on the ISO rather than in the initramfs, which
+# is loaded into RAM in full on every boot. Find the media we booted from.
+APKDIR=""
+for dev in $(blkid 2>/dev/null | grep -i 'TYPE="vfat"' | cut -d: -f1); do
+    mkdir -p "$BOOTMNT"
+    if mount -t vfat -o ro "$dev" "$BOOTMNT" 2>/dev/null; then
+        if [ -f "$BOOTMNT/apkbundle/apk.static" ]; then
+            APKDIR="$BOOTMNT/apkbundle"
+            break
+        fi
+        umount "$BOOTMNT"
+    fi
+done
+
+if [ -n "$APKDIR" ]; then
+    echo "Installing the package manager..."
+    mkdir -p "$MNT/etc/apk/keys" "$MNT/var/lib/apk" "$MNT/var/cache/apk"
+    cp "$APKDIR/apk.static" "$MNT/sbin/apk.static"
+    chmod 755 "$MNT/sbin/apk.static"
+    ln -sf apk.static "$MNT/sbin/apk"
+    cp "$APKDIR"/keys/*.rsa.pub "$MNT/etc/apk/keys/" 2>/dev/null || true
+    cp "$APKDIR/repositories" "$MNT/etc/apk/repositories" 2>/dev/null || true
+
+    echo "Fetching sudo, openssh and gcompat (needs the network)..."
+    if "$MNT/sbin/apk.static" --root "$MNT" --initdb add \
+           alpine-baselayout-data ca-certificates-bundle sudo openssh-server gcompat \
+           >/dev/null 2>&1; then
+        chmod 4755 "$MNT/usr/bin/sudo" 2>/dev/null || true
+        echo "Installed: sudo, openssh, gcompat."
+    else
+        echo "Could not fetch packages -- no network, most likely."
+        echo "The system is still installed and bootable; run"
+        echo "    sudo apk add sudo openssh-server gcompat"
+        echo "once it is up and online."
+    fi
+    umount "$BOOTMNT" 2>/dev/null || true
+else
+    echo "No apk bundle found on the boot media, so no package manager."
+    echo "The system is installed and bootable. Log in as root."
+fi
+
+sync
+umount "$MNT"
+
+echo
+echo "=========================================="
+echo " Installed to $TARGET"
+echo "=========================================="
+echo
+echo "Reboot and it will be found and used. The first boot there asks for a"
+echo "username, a hostname and passwords -- there is somewhere to keep them"
+echo "now."
