@@ -46,9 +46,26 @@ KERNEL_SHA256 = f5d44b93808b02cc2969c5404ba081d97523719c9fd2ba2de6db318b4141cca0
 # SIMPLEDRM and SYSFB_SIMPLEFB make the early framebuffer a DRM device too,
 # so the handoff to i915 is between two drivers of the same kind rather than
 # an eviction, which is what current distributions ship.
+#
+# Written straight into .config rather than through scripts/config, which
+# uppercases every symbol name it is given (`tr a-z A-Z`, line 66). That is
+# harmless for options that are already uppercase and silently wrong for
+# FONT_TER16x32, whose lowercase x became an X naming a symbol that does not
+# exist -- no error, nothing set, and a kernel that then ignores
+# fbcon=font:TER16x32 because it has no such font. olddefconfig resolves the
+# dependencies afterwards either way.
+#
+# FONTS and FONT_TER16x32 exist because the console is unreadable otherwise.
+# defconfig builds only the 8x8 and 8x16 fonts, and 8x16 on a 1080p monitor is
+# 120 columns of very small text -- fine in a terminal window, punishing on a
+# screen across a desk. Terminus 16x32 is twice the size in both directions,
+# selected by fbcon=font:TER16x32 on the command line. It has to be compiled
+# in: changing fonts at runtime needs font *files*, which a system this small
+# does not carry.
 KERNEL_CONFIG_ENABLE = FB FB_EFI FB_VESA FRAMEBUFFER_CONSOLE \
                        FRAMEBUFFER_CONSOLE_DETECT_PRIMARY \
-                       DRM_FBDEV_EMULATION DRM_SIMPLEDRM SYSFB_SIMPLEFB
+                       DRM_FBDEV_EMULATION DRM_SIMPLEDRM SYSFB_SIMPLEFB \
+                       FONTS FONT_TER16x32
 
 # Reject anything that is not one of the two, before a single command runs.
 # An unknown ARCH used to fall through to the x86_64 branch below, so
@@ -85,6 +102,11 @@ endif
 
 all: kernel rootfs initramfs
 
+# apk.static and Alpine's signing keys are staged for the ISO rather than the
+# initramfs. The installer needs them to give a freshly installed root a
+# package manager, and at 5MB they would triple an initramfs that is loaded
+# into RAM in full on every boot. On the ISO they cost nothing but disc space.
+#
 # 1. Compile C init (PID 1) and install BusyBox + symlinks + user profiles +
 # the CA certificate bundle (without it nothing can verify an HTTPS server:
 # apk cannot fetch packages and wget cannot fetch https:// URLs)
@@ -117,10 +139,21 @@ rootfs:
 		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/ntp-step /work/$(ROOTFS_DIR)/etc/bishos/console && \
 		chmod 600 /work/$(ROOTFS_DIR)/etc/shadow && \
 		chmod 440 /work/$(ROOTFS_DIR)/etc/sudoers.d/wheel && \
-		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/sshd /work/$(ROOTFS_DIR)/etc/bishos/net-up && \
+		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/sshd /work/$(ROOTFS_DIR)/etc/bishos/net-up \
+		          /work/$(ROOTFS_DIR)/etc/bishos/install && \
+		ln -sf /etc/bishos/install /work/$(ROOTFS_DIR)/sbin/bishos-install && \
 		chmod 755 /work/$(ROOTFS_DIR)/init /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod 700 /work/$(ROOTFS_DIR)/root && \
-		chmod 1777 /work/$(ROOTFS_DIR)/tmp"
+		chmod 1777 /work/$(ROOTFS_DIR)/tmp && \
+		apk add --no-cache apk-tools-static && \
+		rm -rf /work/$(BUILD_DIR)/apkbundle && \
+		mkdir -p /work/$(BUILD_DIR)/apkbundle/keys && \
+		cp /sbin/apk.static /work/$(BUILD_DIR)/apkbundle/ && \
+		cp /etc/apk/keys/*.rsa.pub /work/$(BUILD_DIR)/apkbundle/keys/ && \
+		printf '%s\n' \
+			'https://dl-cdn.alpinelinux.org/alpine/$(ALPINE_RELEASE)/main' \
+			'https://dl-cdn.alpinelinux.org/alpine/$(ALPINE_RELEASE)/community' \
+			> /work/$(BUILD_DIR)/apkbundle/repositories"
 
 # 2. Package rootfs into initramfs.cpio.gz
 initramfs:
@@ -144,8 +177,8 @@ kernel:
 		cd linux-$(KERNEL_VERSION) && \
 		make ARCH=$(ARCH) mrproper && \
 		$(KMAKE) defconfig && \
-		./scripts/config --file /kbuild/build-$(ARCH)/.config \
-			$(foreach c,$(KERNEL_CONFIG_ENABLE),-e $(c)) && \
+		for s in $(KERNEL_CONFIG_ENABLE); do echo \"CONFIG_\$$s=y\"; done \
+			>> /kbuild/build-$(ARCH)/.config && \
 		$(KMAKE) olddefconfig && \
 		$(KMAKE) -j\$$(nproc) $(KERNEL_IMAGE_TARGET) && \
 		mkdir -p /src/$(BUILD_DIR) && cp /kbuild/build-$(ARCH)/$(KERNEL_ARTIFACT) /src/$(KERNEL)"
@@ -265,6 +298,7 @@ iso: all
 	cp $(KERNEL) $(BUILD_DIR)/iso/boot/vmlinuz
 	cp $(INITRAMFS) $(BUILD_DIR)/iso/boot/
 	cp grub/grub.cfg $(BUILD_DIR)/iso/boot/grub/
+	cp -r $(BUILD_DIR)/apkbundle $(BUILD_DIR)/iso/
 	docker build --platform $(DOCKER_PLATFORM) -q -f Dockerfile.iso -t bishos-iso:$(ARCH) .
 	docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/src bishos-iso:$(ARCH) \
 		sh -c "cd /src && grub-mkrescue -o $(ISO) $(BUILD_DIR)/iso/"
