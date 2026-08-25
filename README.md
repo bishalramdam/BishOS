@@ -200,6 +200,8 @@ of whatever machine it is booted on.
   - [x] CA certificate bundle shipped, so HTTPS can actually be verified
   - [x] Clock kept correct by `ntpd`, which matters because TLS validates
         certificate *dates* -- a wrong clock fails looking like a CA problem
+  - [x] Kernel log persisted to `/var/log/messages` by `syslogd` and `klogd`,
+        capped by rotation so a log cannot fill the root filesystem
   - [x] Installs dynamically-linked software: the first package pulls in
         `musl`, which provides the loader the whole repository needs
 - [x] **Phase 7: Persistent Root Filesystem**

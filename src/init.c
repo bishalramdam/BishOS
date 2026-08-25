@@ -485,21 +485,29 @@ int main(int argc, char **argv) {
     mkdir("/dev/shm", 01777);
     mount("tmpfs", "/dev/shm", "tmpfs", 0, "mode=1777");
 
-    // 4. Home directory for the unprivileged user
+    // 4. Somewhere for syslogd to write. It will not create this itself, and
+    // with the directory missing it starts, logs nothing and reports no error
+    // at all -- so creating it here is the difference between logging working
+    // and only appearing to. Done after the switch_root decision, which means
+    // it also covers a disk made before BishOS had any logging.
+    mkdir("/var", 0755);
+    mkdir("/var/log", 0755);
+
+    // 5. Home directory for the unprivileged user
     mkdir("/home", 0755);
     mkdir("/home/bishal", 0755);
     chown("/home/bishal", 1000, 1000);
 
-    // 5. Set hostname
+    // 6. Set hostname
     sethostname("BishOS", 6);
 
-    // 6. Set base environment variables
+    // 7. Set base environment variables
     setenv("PATH", "/bin:/sbin:/usr/bin:/usr/sbin", 1);
     setenv("HOME", "/root", 1);
     setenv("USER", "root", 1);
     setenv("TERM", "xterm-256color", 1);
 
-    // 7. Seed welcome notes (once -- see seed_file)
+    // 8. Seed welcome notes (once -- see seed_file)
     seed_file("/root/welcome.txt", 0,
               "Welcome to BishOS (Root Mode)!\n\n"
               "Useful commands to try:\n"
@@ -514,7 +522,7 @@ int main(int argc, char **argv) {
               "You have full read/write permissions here.\n"
               "Try: touch myfile.txt && echo 'Hello BishOS' > myfile.txt\n");
 
-    // 8. Bring up networking. DHCP first: QEMU's SLIRP, VMware's NAT, and real
+    // 9. Bring up networking. DHCP first: QEMU's SLIRP, VMware's NAT, and real
     // routers all run DHCP servers, so one code path serves every host. Only
     // if nothing answers (-n: give up, -t/-T: 3 tries x 2s) fall back to
     // QEMU SLIRP's fixed layout so direct-kernel boots still work offline.
@@ -530,7 +538,7 @@ int main(int argc, char **argv) {
         net_mode = "static fallback (10.0.2.15)";
     }
 
-    // 9. Shutdown signals. BusyBox poweroff/halt/reboot (without -f) do not
+    // 10. Shutdown signals. BusyBox poweroff/halt/reboot (without -f) do not
     // call reboot(2) themselves -- they signal PID 1 and trust it to shut
     // down cleanly: SIGUSR2 = poweroff, SIGUSR1 = halt, SIGTERM = reboot.
     // No SA_RESTART: the signal must interrupt waitpid() with EINTR.
@@ -545,7 +553,7 @@ int main(int argc, char **argv) {
     sa.sa_handler = handle_sigchld;
     sigaction(SIGCHLD, &sa, NULL);
 
-    // 10. Welcome banner
+    // 11. Welcome banner
     printf("\n");
     printf("==========================================\n");
     printf("        Welcome to BishOS v%s\n", VERSION_STRING(BISHOS_VERSION));
@@ -557,7 +565,7 @@ int main(int argc, char **argv) {
     printf("User accounts: root, bishal (switch with: 'su - bishal')\n");
     printf("To cleanly shut down the OS, run: poweroff\n\n");
 
-    // 11. Supervise. Load the service table, start everything in it, then
+    // 12. Supervise. Load the service table, start everything in it, then
     // reap forever: a dead child is either a service to restart or an orphan
     // the kernel re-parented to us, and one loop handles both.
     load_services();

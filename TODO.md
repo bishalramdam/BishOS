@@ -24,6 +24,8 @@ Ordered by how much it changes what the OS *is*, not by effort.
   and restarts what it lists, with backoff for anything that dies at once
 - Clock correction: busybox `ntpd` runs as a service and writes the corrected
   time back to the hardware clock, so the next boot starts right
+- Logging: `syslogd` and `klogd` run as services, so the kernel log lands in
+  `/var/log/messages` on the persistent root and outlives a reboot
 
 ---
 
@@ -50,15 +52,28 @@ Console only. `/dev/pts` now exists, so the remaining work is
 service table. Passwords (1.1) matter here too -- sshd will refuse to let
 root in without one.
 
-### 2.2 Nothing ever runs fsck
-Clean shutdown remounts read-only, which is right, but a power loss or a
-killed QEMU leaves ext4 dirty and nothing repairs it. Eventually a root that
-will not mount.
+### 2.2 Nothing ever runs fsck -- considered and declined
+Less urgent than it looks: ext4 journals, and the kernel replays that journal
+at mount, so the ordinary power-loss case already repairs itself. What fsck
+would add is catching structural damage the journal cannot cover, and running
+the periodic check ext4 otherwise never triggers.
 
-- Run `e2fsck -p` on the root device from the initramfs, before mounting
+Declined on size. There is no `e2fsck` to be had cheaply: busybox ships only
+the `fsck` wrapper, Alpine's `e2fsprogs-static` is static *libraries* and no
+binary, and upstream e2fsprogs does not build against musl unpatched. The one
+route that works -- copying Alpine's dynamic `e2fsck` with its seven shared
+libraries and the musl loader -- costs about 870KB compressed, which would
+roughly double a 1.1MB initramfs that is loaded into RAM in full on every
+boot. Not worth it for a check the journal already covers.
 
-### 2.4 No logging
-`dmesg` is the only record and it does not survive a reboot. No syslog.
+### 2.4 Service output is not logged
+`syslogd` and `klogd` now persist the kernel log, but syslog only ever sees
+messages a program deliberately sends it. Services started from the table
+inherit init's stdout, which is the console -- so their output, and init's
+own `[BishOS]` lines, scroll past and are gone.
+
+- Give each non-console service its stdout and stderr on a pipe, and have
+  init forward what it reads there into syslog
 
 ---
 
