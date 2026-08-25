@@ -81,6 +81,12 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   trap, why `/dev/console` is not a terminal a shell can hand back, static vs
   dynamic linking and the musl loader, and the fact that `chown` silently
   drops the setuid bit.
+- **`who`, `w` and `uptime` do not see anyone.** `login` records sessions in
+  `/var/run/utmp`, and there is no such file, so `uptime` reports "0 users"
+  while somebody is sitting at the console and `who` prints nothing at all.
+  init already creates `/var/log` on both boot paths; `/var/run` and an empty
+  `utmp` beside it is the same one-line fix. Cosmetic, but it is the kind of
+  gap that makes a working tool look broken rather than absent.
 - **Multiple TTYs.** One console session only.
 - **Untested paths.** The x86_64 ISO has never booted on real hardware or
   from a USB stick (the hybrid MBR is meant to support it). The ghcr.io push
