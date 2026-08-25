@@ -405,3 +405,52 @@ repository such as Python's `ssl` module, will use the shipped bundle.
 the initramfs is loaded into RAM in full on every boot, so every megabyte is
 a permanent cost, and a package manager whose installs vanish at the next
 reboot would be pointless.
+
+### When a program that is definitely there reports "not found"
+
+Sooner or later something gets installed by `curl ... | sh`, or downloaded as
+a release tarball, and BishOS says this:
+
+```
+$ ./hello
+sh: ./hello: not found
+$ ls -la hello
+-rwxr-xr-x    1 root     root         70432 hello
+```
+
+The file is right there, executable, owned correctly. The message is still
+`not found`, and it is not lying -- it is just not talking about the file.
+
+Almost everything prebuilt on the internet is linked against **glibc**, and a
+dynamic binary names the loader it needs inside itself:
+
+```
+$ readelf -l hello | grep interpreter
+[Requesting program interpreter: /lib/ld-linux-aarch64.so.1]
+```
+
+BishOS is a musl system. Its loader is `/lib/ld-musl-aarch64.so.1`, so
+`/lib/ld-linux-aarch64.so.1` genuinely does not exist -- and when the kernel
+cannot find a binary's interpreter it returns `ENOENT`, which the shell
+reports about the thing you named rather than the loader you never mentioned.
+That is the whole trick: **`not found` means the loader, not the file.**
+
+`readelf -l` is how to confirm it, and the fix is one package:
+
+```bash
+sudo apk add gcompat        # 131 KB
+```
+
+`gcompat` provides `/lib/ld-linux-*.so` and maps the glibc symbols onto musl.
+The same binary then runs:
+
+```
+$ ./hello
+hello from a glibc binary
+```
+
+It is not installed by default. It is a translation layer rather than glibc
+itself, so a binary can start and then misbehave in ways a plain failure to
+start would not have hidden -- worth reaching for when something needs it,
+rather than having it underneath everything by default. Anything built from
+the Alpine repository never needs it: those are musl binaries already.

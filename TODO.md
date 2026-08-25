@@ -42,6 +42,9 @@ Ordered by how much it changes what the OS *is*, not by effort.
   shell can hand the terminal back instead of failing on the way out
 - `make disk-update`: refreshes `init` and `/etc` on an existing disk without
   touching accounts, home directories or installed packages
+- Documented why a prebuilt glibc binary reports `not found` on a musl system
+  when the file is plainly there, how to confirm it with `readelf -l`, and
+  that `apk add gcompat` is the fix
 
 ---
 
@@ -90,10 +93,6 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   `make savedefconfig` and track the result as `config/bishos_defconfig`.
 - **LICENSE file.** Missing, and it matters the moment anyone reads the repo.
   MIT or GPL-2.0 (the latter is thematic for a Linux project).
-- **`gcompat`.** Prebuilt binaries from the internet are usually glibc-linked
-  and fail on musl with a confusing `not found` (that is the missing loader,
-  not a missing file). `apk add gcompat` provides a compatibility layer --
-  worth documenting, since anything installed by `curl | bash` will hit it.
 - **README "what I learned".** The parts other people find interesting: PID 1
   signal semantics, `TIOCSCTTY` and job control, the `console=` preference
   trap, why `/dev/console` is not a terminal a shell can hand back, static vs
