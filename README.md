@@ -138,7 +138,7 @@ partition. On a Linux machine, with `/dev/sdX` the stick:
 
 ```bash
 sudo wipefs -a /dev/sdX                      # clear old signatures
-sudo dd if=bishos-x86_64_v0.7.1.iso of=/dev/sdX bs=4M conv=fsync
+sudo dd if=bishos-x86_64_v0.8.0.iso of=/dev/sdX bs=4M conv=fsync
 sudo sgdisk -e /dev/sdX                      # see below
 sudo sgdisk -n 0:0:0 -t 0:8300 /dev/sdX      # claim the free space
 sudo mkfs.ext4 -L BISHOS /dev/sdX3           # check the real partition name first
@@ -163,8 +163,8 @@ of whatever machine it is booted on.
 4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
    the same `grub.cfg`; only the kernel binary differs:
    ```bash
-   make ARCH=arm64 iso   # -> build/arm64/bishos-arm64_v0.7.1.iso   (UEFI)
-   make iso              # -> build/x86_64/bishos-x86_64_v0.7.1.iso (UEFI + BIOS)
+   make ARCH=arm64 iso   # -> build/arm64/bishos-arm64_v0.8.0.iso   (UEFI)
+   make iso              # -> build/x86_64/bishos-x86_64_v0.8.0.iso (UEFI + BIOS)
    ```
    `VERSION` in the Makefile is the single source of truth: it names the ISO
    and is compiled into init's banner, so a booted system always reports the
@@ -193,8 +193,8 @@ of whatever machine it is booted on.
    [tagged releases](https://github.com/bishalramdam/BishOS/releases), and
    published to GitHub Packages as OCI artifacts:
    ```bash
-   oras pull ghcr.io/bishalramdam/bishos:0.7.1-arm64
-   oras pull ghcr.io/bishalramdam/bishos:0.7.1-x86_64
+   oras pull ghcr.io/bishalramdam/bishos:0.8.0-arm64
+   oras pull ghcr.io/bishalramdam/bishos:0.8.0-x86_64
    ```
    In VMware Fusion: New VM -> drag the ISO in -> "Other Linux 6.x 64-bit Arm".
    The same shell lands on the serial port in QEMU and on the screen in
