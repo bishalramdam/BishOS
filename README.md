@@ -182,11 +182,21 @@ of whatever machine it is booted on.
    than in a tight loop. With no table present, init falls back to a login
    shell on the console, which is what it always did.
 
+   Anything a service prints is collected by init and written to
+   `/var/log/messages` under that service's own name, alongside the kernel's
+   own log, and it survives reboots:
+   ```bash
+   sudo tail -20 /var/log/messages
+   ```
+
 6. **Install software** -- the persistent root ships with `apk`:
    ```bash
-   apk add python3          # or gcc, git, vim, curl, tmux, ...
+   sudo apk add python3     # or gcc, git, vim, curl, tmux, ...
    python3 --version
    ```
+   `sudo`, because you are logged in as `bishal` and installing software is
+   root's business. A RAM-only boot has no accounts and no `sudo`, and the
+   console there is root already.
    Installed packages survive reboots, because the root is a real disk.
    Prebuilt ISOs for both architectures are attached to every
    [CI run](https://github.com/bishalramdam/BishOS/actions) and to
@@ -354,17 +364,30 @@ of whatever machine it is booted on.
 ├── Dockerfile.iso      # ISO packaging container (GRUB + xorriso, per-arch)
 ├── grub/
 │   └── grub.cfg        # Boot menu -- one config, every architecture
-├── etc/                # System configuration overlay
-│   ├── passwd          # User account database (root, bishal)
-│   ├── group           # Group definitions
+├── etc/                # System configuration overlay, copied into the rootfs
+│   ├── bishos/         # Everything init reads or runs
+│   │   ├── services    # The service table: what runs at boot, and how
+│   │   ├── console     # Console session: first-boot passwords, then login
+│   │   ├── net-up      # Applies the network settings below
+│   │   ├── network     # Interface, mode, addresses, DNS policy
+│   │   ├── ntp-step    # Writes the corrected clock back to the RTC
+│   │   └── sshd        # Waits for ssh.enabled, makes host keys, runs sshd
+│   ├── passwd          # User account database (root, bishal, sshd)
+│   ├── shadow          # Ships LOCKED -- "!", never a hash. Set on first boot
+│   ├── group           # Group definitions, including wheel
+│   ├── sudoers.d/
+│   │   └── wheel       # Members of wheel may run anything, with a password
+│   ├── ssh/sshd_config.d/
+│   │   └── bishos.conf # PermitRootLogin no, as a drop-in the package cannot undo
 │   ├── hostname        # System hostname (BishOS)
 │   ├── hosts           # Local loopback resolution
 │   ├── profile         # Login shell environment, aliases, colors
-│   ├── resolv.conf     # Google DNS configuration (8.8.8.8)
+│   ├── resolv.conf     # Fallback nameservers; DHCP overwrites this per lease
 │   └── udhcpc/
-│       └── default.script # DHCP event handler
+│       └── default.script # DHCP event handler: address, route, nameservers
 ├── src/
-│   └── init.c          # Minimal C init (PID 1 + network auto-bringup)
+│   └── init.c          # PID 1: pseudo-filesystems, switch_root, service
+│                       # supervision, log collection, shutdown
 ├── build/              # Scratch, gitignored -- make clean deletes all of it
 │   ├── x86_64/
 │   │   ├── bzImage     # Compiled Linux kernel (x86_64)
@@ -380,6 +403,7 @@ of whatever machine it is booted on.
 │   │   └── bishos-x86_64_v0.9.0.iso
 │   └── arm64/
 │       └── bishos-arm64_v0.9.0.iso
+├── TODO.md             # What is done, what is declined and why, what is left
 └── README.md
 ```
 

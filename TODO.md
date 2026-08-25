@@ -110,11 +110,13 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   every build and never seen. Tracking it would have made that bug a diff.
 - **LICENSE file.** Missing, and it matters the moment anyone reads the repo.
   MIT or GPL-2.0 (the latter is thematic for a Linux project).
-- **README "what I learned".** The parts other people find interesting: PID 1
-  signal semantics, `TIOCSCTTY` and job control, the `console=` preference
-  trap, why `/dev/console` is not a terminal a shell can hand back, static vs
-  dynamic linking and the musl loader, and the fact that `chown` silently
-  drops the setuid bit.
+- **README "what I learned".** There is now enough of this to be the most
+  interesting page in the repo: PID 1 signal semantics; `TIOCSCTTY` and job
+  control; the `console=` preference trap; why `/dev/console` is not a
+  terminal a shell can hand back; why a GPU driver loading can turn the
+  screen off; static vs dynamic linking, the musl loader, and why "not found"
+  names the wrong thing; that `chown` silently drops the setuid bit; that
+  musl has no utmp; and that a green CI run described a machine nobody had.
 - **Multiple TTYs.** One console session only. Now actually possible: virtual
   terminals need a working display console, which is what the DRM fix
   provides, so this becomes a `console` line per `tty1`..`tty6` in the service
