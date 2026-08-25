@@ -61,6 +61,24 @@ libraries and the musl loader -- costs about 870KB compressed, which would
 roughly double a 1.1MB initramfs that is loaded into RAM in full on every
 boot. Not worth it for a check the journal already covers.
 
+### `who` and `uptime` reporting who is logged in -- not possible here
+`uptime` says "0 users" with somebody sitting at the console, and `who`
+prints nothing. The obvious cause is that `/var/run/utmp` does not exist, and
+the obvious fix is to create it next to `/var/log`. That fix does not work,
+and it is worth writing down why so it is not attempted twice.
+
+**musl does not implement utmp.** `pututxline()` returns NULL and writes
+nothing; `getutxent()` returns NULL however the file is populated. Both were
+checked directly, and so was the stronger case: a byte-perfect
+`USER_PROCESS` record written into `/var/run/utmp` by hand still produces no
+output from `who`, because busybox reads through those same stubs rather than
+parsing the file itself.
+
+So this needs either glibc, or a busybox patched to read the file directly --
+both far out of proportion to `who` working. Note also that `w` and `users`
+are not in this busybox build at all, so only `who`, `last` and `uptime`'s
+user count are affected.
+
 ---
 
 ## 2. Polish and learning
@@ -81,12 +99,6 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   trap, why `/dev/console` is not a terminal a shell can hand back, static vs
   dynamic linking and the musl loader, and the fact that `chown` silently
   drops the setuid bit.
-- **`who`, `w` and `uptime` do not see anyone.** `login` records sessions in
-  `/var/run/utmp`, and there is no such file, so `uptime` reports "0 users"
-  while somebody is sitting at the console and `who` prints nothing at all.
-  init already creates `/var/log` on both boot paths; `/var/run` and an empty
-  `utmp` beside it is the same one-line fix. Cosmetic, but it is the kind of
-  gap that makes a working tool look broken rather than absent.
 - **Multiple TTYs.** One console session only.
 - **Untested paths.** The x86_64 ISO has never booted on real hardware or
   from a USB stick (the hybrid MBR is meant to support it). The ghcr.io push
