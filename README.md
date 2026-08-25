@@ -167,7 +167,7 @@ firmware looks for `/EFI/BOOT/BOOTX64.EFI` on a removable device:
 
 ```bash
 sudo mkdir -p /mnt/iso /mnt/esp
-sudo mount -o loop,ro bishos-x86_64_v0.11.1.iso /mnt/iso
+sudo mount -o loop,ro bishos-x86_64_v0.11.2.iso /mnt/iso
 sudo mount /dev/sdX1 /mnt/esp
 sudo cp -r /mnt/iso/. /mnt/esp/
 sudo umount /mnt/iso /mnt/esp && sync
@@ -194,6 +194,16 @@ system across, and -- using the `apk` bundle carried on the boot media -- adds
 boot switches into the stick and asks for a username, a hostname and
 passwords, because there is now somewhere to keep them.
 
+To install again over an existing one, boot the **"BishOS (live -- ignore any
+installed system)"** menu entry first. Once a stick has BishOS on it, init
+finds that root and switches into it, so the live system -- the only place the
+installer can run from -- is otherwise unreachable. That entry passes
+`bishos.rootwait=0`, which stops init looking. Then:
+
+```bash
+bishos-install --force
+```
+
 Secure Boot must be off, since this GRUB is unsigned.
 
 USB storage can take a surprisingly long time to appear. One stick failed its
@@ -212,8 +222,8 @@ before falling back to RAM, printing its progress as it goes.
 4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
    the same `grub.cfg`; only the kernel binary differs:
    ```bash
-   make ARCH=arm64 iso   # -> output/arm64/bishos-arm64_v0.11.1.iso   (UEFI)
-   make iso              # -> output/x86_64/bishos-x86_64_v0.11.1.iso (UEFI + BIOS)
+   make ARCH=arm64 iso   # -> output/arm64/bishos-arm64_v0.11.2.iso   (UEFI)
+   make iso              # -> output/x86_64/bishos-x86_64_v0.11.2.iso (UEFI + BIOS)
    ```
    `VERSION` in the Makefile is the single source of truth: it names the ISO
    and is compiled into init's banner, so a booted system always reports the
@@ -252,8 +262,8 @@ before falling back to RAM, printing its progress as it goes.
    [tagged releases](https://github.com/bishalramdam/BishOS/releases), and
    published to GitHub Packages as OCI artifacts:
    ```bash
-   oras pull ghcr.io/bishalramdam/bishos:0.11.1-arm64
-   oras pull ghcr.io/bishalramdam/bishos:0.11.1-x86_64
+   oras pull ghcr.io/bishalramdam/bishos:0.11.2-arm64
+   oras pull ghcr.io/bishalramdam/bishos:0.11.2-x86_64
    ```
    In VMware Fusion: New VM -> drag the ISO in -> "Other Linux 6.x 64-bit Arm".
    The same shell lands on the serial port in QEMU and on the screen in
@@ -454,9 +464,9 @@ before falling back to RAM, printing its progress as it goes.
 │       └── bishos-disk.img  # Persistent ext4 root (survives rebuilds)
 ├── output/             # Finished ISOs, gitignored. make clean leaves these
 │   ├── x86_64/
-│   │   └── bishos-x86_64_v0.11.1.iso
+│   │   └── bishos-x86_64_v0.11.2.iso
 │   └── arm64/
-│       └── bishos-arm64_v0.11.1.iso
+│       └── bishos-arm64_v0.11.2.iso
 ├── TODO.md             # What is done, what is declined and why, what is left
 └── README.md
 ```

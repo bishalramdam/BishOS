@@ -22,15 +22,38 @@ if [ "$BISHOS_PERSISTENT" = "1" ]; then
     exit 1
 fi
 
+# --- arguments, in any order ------------------------------------------------
+# --force anywhere, device anywhere. Taking $1 as the device meant
+# "bishos-install --force" looked for a block device named --force and then
+# reported no BISHOS partition found, which is true and unhelpful.
+TARGET=""
+FORCE=""
+for arg in "$@"; do
+    case "$arg" in
+        --force) FORCE=yes ;;
+        -*)      echo "install: unknown option $arg"; exit 1 ;;
+        *)       TARGET="$arg" ;;
+    esac
+done
+
 # --- find the target -------------------------------------------------------
-TARGET="$1"
 if [ -z "$TARGET" ]; then
     TARGET=$(blkid 2>/dev/null | grep 'LABEL="BISHOS"' | head -1 | cut -d: -f1)
 fi
-if [ -z "$TARGET" ] || [ ! -b "$TARGET" ]; then
-    echo "install: no partition labelled BISHOS found, and none given."
+if [ -n "$TARGET" ] && [ ! -b "$TARGET" ]; then
+    echo "install: $TARGET is not a block device."
+    exit 1
+fi
+if [ -z "$TARGET" ]; then
+    echo "install: no partition labelled BISHOS found."
     echo
-    echo "Make one first, from another machine:"
+    echo "Devices the system can see right now:"
+    blkid 2>/dev/null | sed 's/^/    /' || echo "    (blkid found nothing)"
+    echo
+    echo "If the stick is not listed, it may still be enumerating -- USB"
+    echo "storage can take twenty seconds or more. Wait and try again."
+    echo
+    echo "Otherwise make a partition for it, from another machine:"
     echo "    sudo mkfs.ext4 -L BISHOS /dev/sdX2"
     echo
     echo "The label is compared exactly; a trailing space will not match."
@@ -44,7 +67,7 @@ echo
 mkdir -p "$MNT"
 mount "$TARGET" "$MNT"
 
-if [ -e "$MNT/sbin/init" ] && [ "$2" != "--force" ]; then
+if [ -e "$MNT/sbin/init" ] && [ -z "$FORCE" ]; then
     echo "install: $TARGET already has a system on it."
     echo "install: re-run with --force to overwrite it."
     umount "$MNT"
