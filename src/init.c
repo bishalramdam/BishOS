@@ -44,6 +44,9 @@
 // Set by the shutdown signal handler; checked by the PID 1 reap loop.
 static volatile sig_atomic_t shutdown_signal = 0;
 
+// Defined with the service table below, but needed by do_shutdown above it.
+static void hangup_console_session(void);
+
 static void handle_shutdown(int sig) {
     shutdown_signal = sig;
 }
@@ -56,6 +59,15 @@ static void do_shutdown(int sig) {
                      : (sig == SIGUSR1) ? "Halting"
                                         : "Powering off";
     printf("\n[BishOS] %s: terminating all processes...\n", what);
+
+    // The console session owns the terminal, and an interactive shell ignores
+    // SIGTERM by design -- so it used to survive to the SIGKILL and complain
+    // about job control on the way out ("can't set tty process group").
+    // SIGHUP is the signal that actually means "your terminal is going away",
+    // which a shell handles by exiting cleanly. Sent to the negated pid, so
+    // it reaches the whole session: the shell and anything it was running.
+    hangup_console_session();
+    usleep(300000);      // let the shell put the terminal down first
 
     kill(-1, SIGTERM);   // from PID 1 this signals everyone except us
     sleep(2);            // grace period for clean exits
@@ -428,6 +440,53 @@ static void load_services(void) {
     }
 }
 
+// /dev/console is not a terminal in the sense job control needs. It is a
+// redirector to whatever the kernel was told to use, so an fd on it does not
+// refer to the session's actual controlling terminal -- and tcsetpgrp()
+// against it fails with ENOTTY. A shell notices that only on the way out,
+// when it tries to hand the terminal back, and prints "can't set tty process
+// group" as the last thing anyone sees before shutdown.
+//
+// The kernel names the real device in sysfs. This is also why real systems
+// run getty on ttyS0 or ttyAMA0 and never on /dev/console.
+static int open_console_tty(void) {
+    char names[128], path[160], *last;
+    int fd = -1;
+    FILE *f = fopen("/sys/class/tty/console/active", "r");
+
+    if (f) {
+        if (fgets(names, sizeof names, f)) {
+            names[strcspn(names, "\n")] = '\0';
+            // More than one may be listed; the last is the kernel's choice.
+            last = strrchr(names, ' ');
+            last = last ? last + 1 : names;
+            if (*last != '\0') {
+                snprintf(path, sizeof path, "/dev/%s", last);
+                fd = open(path, O_RDWR);
+            }
+        }
+        fclose(f);
+    }
+    if (fd < 0) {
+        fd = open("/dev/console", O_RDWR);   // better than no console at all
+    }
+    if (fd < 0) {
+        fd = open("/dev/ttyS0", O_RDWR);
+    }
+    return fd;
+}
+
+// Tell the console session its terminal is going away. Sent to the negated
+// pid so it reaches the whole session -- the shell and whatever it was
+// running -- because each service gets its own with setsid().
+static void hangup_console_session(void) {
+    for (int i = 0; i < service_count; i++) {
+        if (services[i].action == ACT_CONSOLE && services[i].pid > 0) {
+            kill(-services[i].pid, SIGHUP);
+        }
+    }
+}
+
 static void start_service(struct service *s) {
     int pfd[2] = {-1, -1};
     pid_t pid;
@@ -466,11 +525,8 @@ static void start_service(struct service *s) {
         setsid();
 
         if (s->action == ACT_CONSOLE) {
-            int fd = open("/dev/console", O_RDWR);
+            int fd = open_console_tty();
 
-            if (fd < 0) {
-                fd = open("/dev/ttyS0", O_RDWR);
-            }
             if (fd >= 0) {
                 ioctl(fd, TIOCSCTTY, 1);
                 dup2(fd, 0);
@@ -654,7 +710,11 @@ int main(int argc, char **argv) {
               "Welcome to BishOS, Bishal!\n\n"
               "You are in your own home directory: /home/bishal\n"
               "You have full read/write permissions here.\n"
-              "Try: touch myfile.txt && echo 'Hello BishOS' > myfile.txt\n");
+              "Try: touch myfile.txt && echo 'Hello BishOS' > myfile.txt\n\n"
+              "Anything needing root goes through sudo, including shutdown:\n"
+              "  - sudo apk add python3   (install software)\n"
+              "  - sudo poweroff          (plain 'poweroff' is not yours to run)\n"
+              "  - passwd                 (change your own password)\n");
 
     // 9. Bring up networking. DHCP first: QEMU's SLIRP, VMware's NAT, and real
     // routers all run DHCP servers, so one code path serves every host. Only
@@ -704,7 +764,14 @@ int main(int argc, char **argv) {
     } else {
         printf("Accounts:   none on a RAM-only boot -- this console is root\n");
     }
-    printf("To cleanly shut down the OS, run: poweroff\n\n");
+    // On a persistent root the console belongs to bishal, who cannot signal
+    // PID 1 -- so plain "poweroff" fails with an empty, baffling
+    // "poweroff: : Operation not permitted". Say the command that works.
+    if (real_root) {
+        printf("To cleanly shut down the OS, run: sudo poweroff\n\n");
+    } else {
+        printf("To cleanly shut down the OS, run: poweroff\n\n");
+    }
 
     // 12. Supervise. Load the service table, start everything in it, then
     // reap forever: a dead child is either a service to restart or an orphan

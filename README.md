@@ -107,12 +107,20 @@ Builds for **two architectures** from the same source:
    never overwritten by a rebuild. It defaults to 5 GB and is sparse, so it
    costs host disk only as it fills.
    ```bash
+   make ARCH=arm64 disk-update               # refresh init and /etc, keep your data
    make ARCH=arm64 disk-grow                 # bigger, keeping your data
    make ARCH=arm64 DISK_SIZE=20G disk-grow   # any size you like
    make ARCH=arm64 disk-reset                # wipe and start clean
    ```
    Growing works in place because the image is a whole-disk ext4 filesystem
    with no partition table -- there is no partition to move before resizing.
+
+   `disk-update` is the one to remember. Because a rebuild never touches an
+   existing image, a disk in daily use goes on booting whatever `init` it was
+   created with, and new features simply do not appear -- which looks exactly
+   like new features being broken. It replaces `/sbin/init` and the BishOS
+   configuration under `/etc`, and leaves accounts, home directories and
+   installed packages alone.
 
 ### Persistent live USB
 

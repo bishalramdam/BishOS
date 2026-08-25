@@ -55,7 +55,7 @@ CONSOLE = ttyS0
 NIC_MODEL = e1000
 endif
 
-.PHONY: all clean rootfs initramfs kernel run iso disk disk-reset disk-grow print-kernel-version print-version
+.PHONY: all clean rootfs initramfs kernel run iso disk disk-reset disk-grow disk-update print-kernel-version print-version
 
 all: kernel rootfs initramfs
 
@@ -179,6 +179,41 @@ disk-grow:
 		e2fsck -fp /work/$(DISK) || true; \
 		resize2fs /work/$(DISK)"
 	@echo "$(DISK) grown to $(DISK_SIZE)"
+
+# Refresh the system-owned files on an existing disk, keeping everything else.
+#
+# The disk target deliberately never touches an image that already exists --
+# that is what protects your data. It is also what leaves a machine in daily
+# use booting whatever init it was built with, long after the source moved on,
+# and the failure is silent: the features are simply absent, which looks
+# exactly like the features being broken.
+#
+# Replaced: /sbin/init and the BishOS-owned configuration under /etc.
+# Never touched: accounts, passwords, home directories, installed packages.
+# The sshd user is appended only if missing, since sshd will not start without
+# it and an old disk predates it.
+disk-update: rootfs
+	@test -f $(DISK) || { echo "$(DISK) does not exist -- run: make ARCH=$(ARCH) disk"; exit 1; }
+	docker run --rm --privileged --platform $(DOCKER_PLATFORM) -v "$$PWD":/work alpine:latest sh -c "\
+		apk add --no-cache e2fsprogs > /dev/null && \
+		mkdir -p /mnt/d && mount -o loop /work/$(DISK) /mnt/d && \
+		cp /work/$(ROOTFS_DIR)/init /mnt/d/sbin/init && chmod 755 /mnt/d/sbin/init && \
+		mkdir -p /mnt/d/etc/bishos /mnt/d/etc/sudoers.d /mnt/d/etc/ssh/sshd_config.d \
+		         /mnt/d/var/log /mnt/d/var/empty && \
+		cp /work/etc/bishos/* /mnt/d/etc/bishos/ && \
+		chmod 644 /mnt/d/etc/bishos/services && \
+		chmod 755 /mnt/d/etc/bishos/console /mnt/d/etc/bishos/sshd /mnt/d/etc/bishos/ntp-step && \
+		cp /work/etc/sudoers.d/wheel /mnt/d/etc/sudoers.d/wheel && chmod 440 /mnt/d/etc/sudoers.d/wheel && \
+		cp /work/etc/ssh/sshd_config.d/bishos.conf /mnt/d/etc/ssh/sshd_config.d/ && \
+		grep -q '^sshd:' /mnt/d/etc/passwd || echo 'sshd:x:22:22:sshd:/dev/null:/sbin/nologin' >> /mnt/d/etc/passwd; \
+		grep -q '^sshd:' /mnt/d/etc/group  || echo 'sshd:x:22:' >> /mnt/d/etc/group; \
+		chown -R 0:0 /mnt/d/sbin/init /mnt/d/etc/bishos /mnt/d/etc/sudoers.d /mnt/d/etc/ssh/sshd_config.d && \
+		chmod 4755 /mnt/d/usr/bin/sudo 2>/dev/null; \
+		sync && umount /mnt/d && \
+		e2fsck -fp /work/$(DISK) > /dev/null; true"
+	@echo "$(DISK): init and /etc refreshed. Accounts, home directories and"
+	@echo "installed packages were left alone. If sshd or sudo are missing,"
+	@echo "the disk predates them -- boot it and: sudo apk add openssh-server sudo"
 
 # Destroy and recreate the persistent root. Wipes everything on it.
 disk-reset:
