@@ -1,13 +1,13 @@
 # BishOS TODO
 
-Where the system stands after v0.7.1, and what is left. Everything in
-"Done" boots and is verified; everything below it is not started.
+Where the system stands and what is left. Everything in "Done" boots and is
+verified; the last few entries are on `main` and not yet in a tagged release.
 
 Ordered by how much it changes what the OS *is*, not by effort.
 
 ---
 
-## Done (v0.7.1)
+## Done
 
 - Linux 6.18.46 LTS compiled from source, pinned by SHA-256, x86_64 + arm64
 - Custom C PID 1: mounts pseudo-filesystems, reaps orphans, controlling TTY
@@ -35,12 +35,18 @@ Ordered by how much it changes what the OS *is*, not by effort.
 - Service output: init gives every non-console service a pipe and forwards
   what it prints to syslogd under that service's own name, so a daemon that
   never calls syslog(3) still ends up in `/var/log/messages`
+- Console on a real terminal: the session runs on the tty named in
+  `/sys/class/tty/console/active` rather than `/dev/console`, which is a
+  redirector and not a controlling terminal -- so job control works and a
+  shell can hand the terminal back instead of failing on the way out
+- `make disk-update`: refreshes `init` and `/etc` on an existing disk without
+  touching accounts, home directories or installed packages
 
 ---
 
-## 1. Robustness
+## 1. Considered and declined
 
-### 1.1 Nothing ever runs fsck -- considered and declined
+### fsck on every boot
 Less urgent than it looks: ext4 journals, and the kernel replays that journal
 at mount, so the ordinary power-loss case already repairs itself. What fsck
 would add is catching structural damage the journal cannot cover, and running
@@ -58,6 +64,8 @@ boot. Not worth it for a check the journal already covers.
 
 ## 2. Polish and learning
 
+Nothing here changes what the OS is. It is a list of small good ideas.
+
 - **Minimal kernel config.** Still stock `defconfig` (14 MB x86_64,
   41 MB arm64). `make menuconfig`, cut one subsystem per boot test, then
   `make savedefconfig` and track the result as `config/bishos_defconfig`.
@@ -69,7 +77,9 @@ boot. Not worth it for a check the journal already covers.
   worth documenting, since anything installed by `curl | bash` will hit it.
 - **README "what I learned".** The parts other people find interesting: PID 1
   signal semantics, `TIOCSCTTY` and job control, the `console=` preference
-  trap, static vs dynamic linking and the musl loader.
+  trap, why `/dev/console` is not a terminal a shell can hand back, static vs
+  dynamic linking and the musl loader, and the fact that `chown` silently
+  drops the setuid bit.
 - **Multiple TTYs.** One console session only.
 - **Untested paths.** The x86_64 ISO has never booted on real hardware or
   from a USB stick (the hybrid MBR is meant to support it). The ghcr.io push
@@ -82,15 +92,15 @@ boot. Not worth it for a check the journal already covers.
 
 ## Suggested order
 
-**Nothing, in the sense that matters.** Section 1 is empty: the machine boots,
-knows who you are, can be reached over the network, supervises its services
-and keeps a log of what they said. What is left is polish, and a LICENSE file
-is the cheapest thing on that list.
+**Nothing, in the sense that matters.** There is no open work in section 1:
+the machine boots, knows who you are, can be reached over the network,
+supervises its services and keeps a record of what they said. Everything left
+is polish, and a LICENSE file is the cheapest thing on that list.
 
 The one real gap is not code. The x86_64 ISO has never booted on real
 hardware or from a USB stick, and three tagged releases now carry that
 untested path -- it is the only claim the README makes that has never been
-checked.
+checked. Everything else here is optional; that one is a promise outstanding.
 
 Worth remembering: this is a learning project, and it is allowed to be
 finished. It boots on real hardware, installs Python, supervises services,

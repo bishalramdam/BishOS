@@ -201,75 +201,29 @@ of whatever machine it is booted on.
   - [x] Custom static C `/init` running as PID 1
   - [x] `newc` cpio.gz initramfs generation
   - [x] Direct kernel boot in QEMU with serial console
+
 - [x] **Phase 2: Interactive Shell & Core Utilities**
   - [x] Integrate static BusyBox
   - [x] Mount pseudofilesystems (`/proc`, `/sys`, `/dev`)
   - [x] Interactive `sh` prompt with controlling TTY & job control
   - [x] User accounts & shell profile (`/etc/passwd`, `/etc/group`, `/etc/profile`, `/etc/hostname`)
+
 - [x] **Phase 3: Kernel Compilation from Source**
   - [x] Linux 6.18.46 (LTS) from kernel.org, pinned by SHA-256
   - [x] Cross-compiled for x86_64 / built natively for arm64 in Docker
   - [ ] Custom minimal `defconfig` (currently stock `defconfig` per arch)
+
 - [x] **Phase 4: Networking & Internet Connectivity**
   - [x] NIC driver built into the kernel (e1000 on x86_64, virtio-net on arm64)
   - [x] Auto-configuration of `eth0` and default gateway
   - [x] Google DNS resolution (`8.8.8.8`, `8.8.4.4`)
   - [x] Live Internet connectivity, ICMP ping, and HTTP web fetching
+
 - [x] **Phase 5: Multi-Architecture Support**
   - [x] Single Makefile drives both arches (`make ARCH=arm64 ...`)
   - [x] Shared kernel source tree, per-arch out-of-tree (`O=`) build dirs
   - [x] Hardware-accelerated arm64 boot on Apple Silicon via HVF
-- [x] **Phase 8: Package Manager**
-  - [x] Alpine's `apk` (static binary) on the persistent root, with Alpine's
-        signing keys so downloads are verified, not blindly trusted
-  - [x] Repositories pinned to a specific Alpine release
-  - [x] CA certificate bundle shipped, so HTTPS can actually be verified
-  - [x] Clock kept correct by `ntpd`, which matters because TLS validates
-        certificate *dates* -- a wrong clock fails looking like a CA problem
-  - [x] Kernel log persisted to `/var/log/messages` by `syslogd` and `klogd`,
-        capped by rotation so a log cannot fill the root filesystem
-- [x] **Phase 9: Accounts**
-  - [x] `/etc/shadow` ships *locked* -- `!`, not a hash -- so no default
-        password is ever committed, and nothing can log in until one is set
-  - [x] First boot on a persistent root asks for the `root` and `bishal`
-        passwords once, and writes SHA-512 crypt hashes to `/etc/shadow`
-  - [x] The console runs `login`, not a root shell, so a session starts by
-        saying who you are
-  - [x] `sudo` on the disk, with `wheel` allowed in a `/etc/sudoers.d`
-        drop-in. It lives on the root and not in the initramfs because
-        busybox has no `sudo` applet and the real one is dynamically linked
-  - [x] A RAM-only boot deliberately keeps the old root shell: `/etc` there
-        is rebuilt from the initramfs every boot, so a password set on the
-        ISO could never be asked for again
-- [x] **Phase 10: Remote Access**
-  - [x] `sshd` supervised from the service table, on a machine that already
-        had the two things it needs: ptys, and passwords to check
-  - [x] Host keys generated on the machine at first start, never shipped in
-        the image -- a host key in an ISO is the same private key on every
-        install, which is the one thing host keys exist to prevent
-  - [x] `PermitRootLogin no`, via a `/etc/ssh/sshd_config.d` drop-in that
-        survives reinstalling the package. `root` is the account name every
-        scanner tries first, and `bishal` plus `sudo` is a better road in
-  - [x] `make run` forwards host port 2222 to the guest, because QEMU's
-        user-mode networking otherwise gives the guest no inbound route:
-        `ssh -p 2222 bishal@localhost`
-  - [x] Every non-console service gets its stdout and stderr on a pipe that
-        init forwards to syslogd under that service's own name. Most daemons
-        never call `syslog(3)` -- they just print -- so without this their
-        output scrolled off the console and was gone
-  - [x] Installs dynamically-linked software: the first package pulls in
-        `musl`, which provides the loader the whole repository needs
-- [x] **Phase 7: Persistent Root Filesystem**
-  - [x] Raw ext4 disk image built with `mke2fs -d` (no loop device, no
-        privileged container)
-  - [x] `switch_root` out of the initramfs into the real root, carrying
-        `/proc`, `/sys`, `/dev` across with `MS_MOVE`
-  - [x] Graceful fallback to running from RAM when no disk is attached
-        (so the ISO and direct-kernel boots still work)
-  - [x] The root is found by scanning every block device for the `BISHOS`
-        label, so it can live on a disk, a USB partition or an SD card --
-        and a foreign disk is never adopted
-  - [x] Read-only remount on shutdown so ext4 stays clean
+
 - [x] **Phase 6: Real Hypervisors & Init Lifecycle**
   - [x] UEFI-bootable ISO via GRUB (`make ARCH=arm64 iso`), verified on
         QEMU + EDK2 firmware and VMware Fusion
@@ -284,6 +238,76 @@ of whatever machine it is booted on.
   - [x] Semantic versioning: one `VERSION` names the ISO and the banner
 
 ---
+
+- [x] **Phase 7: Persistent Root Filesystem**
+  - [x] Raw ext4 disk image built with `mke2fs -d` (no loop device, no
+        privileged container)
+  - [x] `switch_root` out of the initramfs into the real root, carrying
+        `/proc`, `/sys`, `/dev` across with `MS_MOVE`
+  - [x] Graceful fallback to running from RAM when no disk is attached
+        (so the ISO and direct-kernel boots still work)
+  - [x] The root is found by scanning every block device for the `BISHOS`
+        label, so it can live on a disk, a USB partition or an SD card --
+        and a foreign disk is never adopted
+  - [x] Read-only remount on shutdown so ext4 stays clean
+  - [x] `make disk-update` refreshes `init` and the BishOS configuration on
+        an existing disk without touching accounts, home directories or
+        installed packages. A rebuild never overwrites a disk that already
+        exists -- which protects your data, and quietly leaves a machine in
+        daily use booting whatever `init` it was created with
+
+- [x] **Phase 8: Package Manager**
+  - [x] Alpine's `apk` (static binary) on the persistent root, with Alpine's
+        signing keys so downloads are verified, not blindly trusted
+  - [x] Repositories pinned to a specific Alpine release
+  - [x] CA certificate bundle shipped, so HTTPS can actually be verified
+  - [x] Installs dynamically-linked software: the first package pulls in
+        `musl`, which provides the loader the whole repository needs
+  - [x] Clock kept correct by `ntpd`, which matters because TLS validates
+        certificate *dates* -- a wrong clock fails looking like a CA problem
+
+- [x] **Phase 9: Accounts**
+  - [x] `/etc/shadow` ships *locked* -- `!`, not a hash -- so no default
+        password is ever committed, and nothing can log in until one is set
+  - [x] First boot on a persistent root asks for the `root` and `bishal`
+        passwords once, and writes SHA-512 crypt hashes to `/etc/shadow`
+  - [x] The console runs `login`, not a root shell, so a session starts by
+        saying who you are
+  - [x] `sudo` on the disk, with `wheel` allowed in a `/etc/sudoers.d`
+        drop-in. It lives on the root and not in the initramfs because
+        busybox has no `sudo` applet and the real one is dynamically linked
+  - [x] A RAM-only boot deliberately keeps the old root shell: `/etc` there
+        is rebuilt from the initramfs every boot, so a password set on the
+        ISO could never be asked for again
+
+- [x] **Phase 10: Remote Access**
+  - [x] `sshd` supervised from the service table, on a machine that already
+        had the two things it needs: ptys, and passwords to check
+  - [x] Host keys generated on the machine at first start, never shipped in
+        the image -- a host key in an ISO is the same private key on every
+        install, which is the one thing host keys exist to prevent
+  - [x] `PermitRootLogin no`, via a `/etc/ssh/sshd_config.d` drop-in that
+        survives reinstalling the package. `root` is the account name every
+        scanner tries first, and `bishal` plus `sudo` is a better road in
+  - [x] `make run` forwards host port 2222 to the guest, because QEMU's
+        user-mode networking otherwise gives the guest no inbound route:
+        `ssh -p 2222 bishal@localhost`
+
+- [x] **Phase 11: Logging & the Console**
+  - [x] Kernel log persisted to `/var/log/messages` by `syslogd` and `klogd`,
+        capped by rotation so a log cannot fill the root filesystem
+  - [x] Every non-console service gets its stdout and stderr on a pipe that
+        init forwards to syslogd under that service's own name. Most daemons
+        never call `syslog(3)` -- they just print -- so without this their
+        output scrolled off the console and was gone
+  - [x] The console session runs on the real tty the kernel names in
+        `/sys/class/tty/console/active`, not on `/dev/console`. The latter is
+        a redirector, not the session's controlling terminal, so `tcsetpgrp`
+        against it fails -- which a shell only discovers on the way out, and
+        every shutdown ended with `can't set tty process group`
+  - [x] The console session is sent `SIGHUP` before the general `SIGTERM` at
+        shutdown: an interactive shell ignores `SIGTERM` by design, and
+        `SIGHUP` is what actually means "your terminal is going away"
 
 ## 📂 Project Layout
 
