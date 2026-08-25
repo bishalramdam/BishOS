@@ -1,13 +1,13 @@
 # BishOS TODO
 
-Where the system stands after v0.7.0, and what is left. Everything in
+Where the system stands after v0.7.1, and what is left. Everything in
 "Done" boots and is verified; everything below it is not started.
 
 Ordered by how much it changes what the OS *is*, not by effort.
 
 ---
 
-## Done (v0.7.0)
+## Done (v0.7.1)
 
 - Linux 6.18.46 LTS compiled from source, pinned by SHA-256, x86_64 + arm64
 - Custom C PID 1: mounts pseudo-filesystems, reaps orphans, controlling TTY
