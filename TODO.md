@@ -135,12 +135,11 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   terminals need a working display console, which is what the DRM fix
   provides, so this becomes a `console` line per `tty1`..`tty6` in the service
   table rather than something the kernel cannot do.
-- **Untested paths.** The x86_64 ISO now boots on real hardware with a working
-  screen, networking and DNS -- confirmed on an Intel desktop. What has not
-  been confirmed there is persistence: that machine's USB stick fails its
-  first descriptor read at SuperSpeed and sometimes never enumerates at all,
-  which is a property of the stick rather than of BishOS. The ghcr.io push has
-  still not been confirmed working.
+- **Untested paths.** Only one left: the ghcr.io push has never been confirmed
+  working. Everything else has now been seen on real hardware -- an Intel
+  desktop booting the x86_64 ISO from a USB stick, with a working screen,
+  networking, DHCP-supplied DNS, a persistent root on the stick's second
+  partition, and accounts created on first boot.
 - **Swap.** None configured.
 
 ---
@@ -153,13 +152,16 @@ knows who you are, can be reached over the network when asked, supervises its
 services and keeps a record of what they said. Everything remaining is
 polish, and a LICENSE file is the cheapest thing on that list.
 
-The one real gap is confirmation, not code. The x86_64 ISO was tried on an
-Intel desktop and the screen stayed black after GRUB; every release up to
-0.8.0 carries that. The cause is understood and fixed -- a GPU driver built
-in without a console to replace the firmware framebuffer it evicts -- but the
-fix has not yet been run on the machine that showed the fault, and QEMU
-cannot show it either way. Everything else here is optional; that one is a
-promise outstanding.
+The promise that stood since the beginning is kept: BishOS boots on real
+hardware from a USB stick, with a screen, a network, and a root that
+remembers. Four faults stood between the tag and that, and none of them could
+be reproduced in QEMU -- a GPU driver evicting the console it needed, a
+five-second wait for a stick that took twenty-three, an initramfs built on
+the host that silently dropped every root-owned file on any machine but the
+author's, and an installer that had never existed because nothing had needed
+it before.
+
+What is left is optional.
 
 Worth remembering: this is a learning project, and it is allowed to be
 finished. It boots on real hardware, installs Python, supervises services,
