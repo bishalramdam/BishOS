@@ -245,6 +245,10 @@ of whatever machine it is booted on.
   - [x] `make run` forwards host port 2222 to the guest, because QEMU's
         user-mode networking otherwise gives the guest no inbound route:
         `ssh -p 2222 bishal@localhost`
+  - [x] Every non-console service gets its stdout and stderr on a pipe that
+        init forwards to syslogd under that service's own name. Most daemons
+        never call `syslog(3)` -- they just print -- so without this their
+        output scrolled off the console and was gone
   - [x] Installs dynamically-linked software: the first package pulls in
         `musl`, which provides the loader the whole repository needs
 - [x] **Phase 7: Persistent Root Filesystem**

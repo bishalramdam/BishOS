@@ -23,21 +23,32 @@ if grep -q '^root:!' /etc/shadow 2>/dev/null; then
     echo "Both accounts are locked until you set one. You are asked once;"
     echo "the answers are written to /etc/shadow on this disk."
     echo
-    echo "  root   -- full control, used by sudo"
+    echo "  root   -- full control, reached with sudo"
     echo "  bishal -- the account you log in as"
+    echo
+    echo "Rules: at least 6 characters, and not a variation of the username."
+    echo "Nothing appears as you type. That is deliberate, not a hung prompt."
+    echo "You will be asked to type each password twice."
     echo
 
     # Loop rather than give up: passwd exits non-zero when the two entries
     # differ or the password is rejected, and a half-finished setup would
     # leave an account nobody can reach.
     for user in root bishal; do
+        echo "------------------------------------------"
+        echo " Password for: $user"
+        echo "------------------------------------------"
         while ! passwd "$user"; do
-            echo "Not set -- try again."
+            echo
+            echo ">> Not set. The two entries must match, and a password"
+            echo ">> rejected as too weak is not accepted. Trying again."
+            echo
         done
+        echo "OK: $user is set."
         echo
     done
 
-    echo "Done. Log in as 'bishal' below."
+    echo "Both done. Log in as 'bishal' below."
     echo
 fi
 

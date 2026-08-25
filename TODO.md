@@ -32,6 +32,9 @@ Ordered by how much it changes what the OS *is*, not by effort.
 - Remote access: `sshd` runs from the service table, generating its host keys
   on the machine at first start. Root may not log in over the network;
   `make run` forwards a host port so the guest is reachable
+- Service output: init gives every non-console service a pipe and forwards
+  what it prints to syslogd under that service's own name, so a daemon that
+  never calls syslog(3) still ends up in `/var/log/messages`
 
 ---
 
@@ -50,15 +53,6 @@ route that works -- copying Alpine's dynamic `e2fsck` with its seven shared
 libraries and the musl loader -- costs about 870KB compressed, which would
 roughly double a 1.1MB initramfs that is loaded into RAM in full on every
 boot. Not worth it for a check the journal already covers.
-
-### 1.2 Service output is not logged
-`syslogd` and `klogd` now persist the kernel log, but syslog only ever sees
-messages a program deliberately sends it. Services started from the table
-inherit init's stdout, which is the console -- so their output, and init's
-own `[BishOS]` lines, scroll past and are gone.
-
-- Give each non-console service its stdout and stderr on a pipe, and have
-  init forward what it reads there into syslog
 
 ---
 
@@ -88,14 +82,15 @@ own `[BishOS]` lines, scroll past and are gone.
 
 ## Suggested order
 
-**1.2, then whatever you feel like.** Section 1 is down to one real item:
-services still log nowhere, which is the thing you notice the first time
-something breaks while you are not watching. After that the list is polish,
-and a LICENSE file is the cheapest thing on it.
+**Nothing, in the sense that matters.** Section 1 is empty: the machine boots,
+knows who you are, can be reached over the network, supervises its services
+and keeps a log of what they said. What is left is polish, and a LICENSE file
+is the cheapest thing on that list.
 
-The x86_64 ISO has still never booted on real hardware, and two tagged
-releases now carry that untested path. It is the only claim in the README
-that has never been checked.
+The one real gap is not code. The x86_64 ISO has never booted on real
+hardware or from a USB stick, and three tagged releases now carry that
+untested path -- it is the only claim the README makes that has never been
+checked.
 
 Worth remembering: this is a learning project, and it is allowed to be
 finished. It boots on real hardware, installs Python, supervises services,

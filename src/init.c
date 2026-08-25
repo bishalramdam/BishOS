@@ -12,6 +12,9 @@
 #include <termios.h>
 #include <errno.h>
 #include <time.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 // Version comes from the Makefile (-DBISHOS_VERSION=0.3.0). The two-step
 // stringify is what turns that bare token into a string literal.
@@ -235,6 +238,14 @@ struct service {
     int failures;
     time_t retry_after;
     int finished;            // an ACT_ONCE that has already run
+
+    // Everything the service writes to stdout and stderr arrives here. A
+    // daemon does not call syslog(3) just because one is running -- most
+    // simply print -- so without this its output goes to the console and is
+    // gone. Partial reads are held in logbuf until a newline completes them.
+    int logfd;               // read end of that pipe, -1 when not running
+    char logbuf[256];
+    int loglen;
 };
 
 static struct service services[MAX_SERVICES];
@@ -244,6 +255,91 @@ static int service_count;
 // child is then noticed at once instead of up to a second later.
 static void handle_sigchld(int sig) {
     (void) sig;
+}
+
+// Connected to syslogd's socket on first use. Kept open, and reopened if it
+// ever breaks, because syslogd is a supervised service that may restart.
+static int logsock = -1;
+
+// One line of service output, handed to syslogd. The wire format is plain
+// text: "<PRI>tag: message", where PRI encodes facility and severity -- 14 is
+// user.info. Speaking it directly rather than through syslog(3) is what lets
+// each service keep its own name as the tag instead of everything arriving
+// as "init".
+static void log_line(const char *name, const char *line) {
+    char msg[512];
+    int n;
+
+    if (logsock < 0) {
+        struct sockaddr_un sa;
+
+        logsock = socket(AF_UNIX, SOCK_DGRAM, 0);
+        if (logsock >= 0) {
+            memset(&sa, 0, sizeof sa);
+            sa.sun_family = AF_UNIX;
+            snprintf(sa.sun_path, sizeof sa.sun_path, "%s", "/dev/log");
+            if (connect(logsock, (struct sockaddr *) &sa, sizeof sa) != 0) {
+                close(logsock);
+                logsock = -1;
+            }
+        }
+    }
+
+    n = snprintf(msg, sizeof msg, "<14>%s: %s", name, line);
+    if (logsock >= 0 && send(logsock, msg, n, MSG_NOSIGNAL) == n) {
+        return;
+    }
+
+    // No syslogd yet -- early boot, or it died and has not been restarted.
+    // The console is worse than a log file but far better than nothing, and
+    // this is exactly when the message matters most.
+    if (logsock >= 0) {
+        close(logsock);
+        logsock = -1;
+    }
+    printf("[%s] %s\n", name, line);
+}
+
+// Read whatever is waiting on a service's pipe and log it a line at a time.
+// A line longer than the buffer is flushed as-is rather than dropped.
+static void drain_service_log(struct service *s) {
+    char buf[256];
+    ssize_t n;
+
+    while ((n = read(s->logfd, buf, sizeof buf)) > 0) {
+        for (ssize_t i = 0; i < n; i++) {
+            // Some daemons end lines with CRLF even down a pipe. Dropping the
+            // CR keeps a stray ^M out of every one of their log lines.
+            if (buf[i] == '\r') {
+                continue;
+            }
+            if (buf[i] == '\n' || s->loglen == (int) sizeof s->logbuf - 1) {
+                s->logbuf[s->loglen] = '\0';
+                if (s->loglen > 0) {
+                    log_line(s->name, s->logbuf);
+                }
+                s->loglen = 0;
+            } else {
+                s->logbuf[s->loglen++] = buf[i];
+            }
+        }
+    }
+}
+
+// Called when a service is gone: whatever it said on the way out is still in
+// the pipe, and an unterminated last line would otherwise be lost with it.
+static void close_service_log(struct service *s) {
+    if (s->logfd < 0) {
+        return;
+    }
+    drain_service_log(s);
+    if (s->loglen > 0) {
+        s->logbuf[s->loglen] = '\0';
+        log_line(s->name, s->logbuf);
+        s->loglen = 0;
+    }
+    close(s->logfd);
+    s->logfd = -1;
 }
 
 static void tokenize(struct service *s) {
@@ -274,6 +370,7 @@ static void add_service(const char *name, enum action action, const char *cmd) {
     }
     s = &services[service_count];
     memset(s, 0, sizeof *s);
+    s->logfd = -1;
     snprintf(s->name, sizeof s->name, "%s", name);
     s->action = action;
     snprintf(s->cmdline, sizeof s->cmdline, "%s", cmd);
@@ -332,15 +429,37 @@ static void load_services(void) {
 }
 
 static void start_service(struct service *s) {
-    pid_t pid = fork();
+    int pfd[2] = {-1, -1};
+    pid_t pid;
+
+    // The console keeps the real terminal -- it is a session for a person to
+    // type into, not output to collect. Everything else gets a pipe.
+    if (s->action != ACT_CONSOLE && pipe(pfd) != 0) {
+        pfd[0] = pfd[1] = -1;
+    }
+
+    pid = fork();
 
     if (pid < 0) {
         perror("[BishOS] fork");
+        if (pfd[0] >= 0) {
+            close(pfd[0]);
+            close(pfd[1]);
+        }
         s->retry_after = time(NULL) + 2;
         return;
     }
 
     if (pid == 0) {
+        if (pfd[1] >= 0) {
+            close(pfd[0]);
+            dup2(pfd[1], 1);
+            dup2(pfd[1], 2);
+            if (pfd[1] > 2) {
+                close(pfd[1]);
+            }
+        }
+
         // Every service gets its own session, so a Ctrl-C aimed at the shell
         // cannot reach a daemon. Only the console service claims the
         // terminal, which is what gives it job control.
@@ -376,6 +495,14 @@ static void start_service(struct service *s) {
         _exit(127);
     }
 
+    if (pfd[0] >= 0) {
+        close(pfd[1]);
+        s->logfd = pfd[0];
+        // Non-blocking is not optional here. drain_service_log() reads until
+        // the pipe is empty, and a blocking read on the last, empty attempt
+        // would stall PID 1 -- taking the whole system with it.
+        fcntl(s->logfd, F_SETFL, O_NONBLOCK);
+    }
     s->pid = pid;
     s->started = time(NULL);
 }
@@ -404,6 +531,7 @@ static void service_exited(pid_t pid, int status) {
             continue;
         }
         s->pid = 0;
+        close_service_log(s);
 
         if (s->action == ACT_ONCE) {
             s->finished = 1;
@@ -580,7 +708,9 @@ int main(int argc, char **argv) {
 
     // 12. Supervise. Load the service table, start everything in it, then
     // reap forever: a dead child is either a service to restart or an orphan
-    // the kernel re-parented to us, and one loop handles both.
+    // the kernel re-parented to us, and one loop handles both. The same loop
+    // collects what the services print and forwards it to syslogd, so their
+    // output ends up in the log rather than scrolling off the console.
     load_services();
     printf("Services:   %d configured\n\n", service_count);
 
@@ -603,10 +733,34 @@ int main(int argc, char **argv) {
             perror("[BishOS] waitpid");
         }
 
-        // Wait for something to happen. SIGCHLD cuts this short, so a dead
-        // child is handled at once; the timeout is what lets a backed-off
-        // restart eventually come due.
-        sleep(1);
+        // Wait for something to happen: a service with something to say, or
+        // a dead child -- SIGCHLD interrupts this the same way it interrupted
+        // the sleep that used to be here. The timeout is what lets a
+        // backed-off restart eventually come due.
+        {
+            struct pollfd pfds[MAX_SERVICES];
+            int owner[MAX_SERVICES];
+            int nfds = 0;
+
+            for (int i = 0; i < service_count; i++) {
+                if (services[i].logfd >= 0) {
+                    pfds[nfds].fd = services[i].logfd;
+                    pfds[nfds].events = POLLIN;
+                    pfds[nfds].revents = 0;
+                    owner[nfds] = i;
+                    nfds++;
+                }
+            }
+
+            // With nothing to watch this is just the old one-second sleep.
+            if (poll(pfds, nfds, 1000) > 0) {
+                for (int j = 0; j < nfds; j++) {
+                    if (pfds[j].revents != 0) {
+                        drain_service_log(&services[owner[j]]);
+                    }
+                }
+            }
+        }
     }
 
     return 0;
