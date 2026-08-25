@@ -34,6 +34,16 @@ KERNEL_SHA256 = f5d44b93808b02cc2969c5404ba081d97523719c9fd2ba2de6db318b4141cca0
 KERNEL_CONFIG_ENABLE = FB FB_EFI FB_VESA FRAMEBUFFER_CONSOLE \
                        FRAMEBUFFER_CONSOLE_DETECT_PRIMARY
 
+# Reject anything that is not one of the two, before a single command runs.
+# An unknown ARCH used to fall through to the x86_64 branch below, so
+# "make ARCH=arm65" cheerfully built an x86_64 kernel into build/arm65 and
+# died minutes later inside the kernel's own Makefile with "arch/arm65/
+# Makefile: No such file or directory" -- which points at Linux rather than
+# at the typo that caused it.
+ifeq ($(filter $(ARCH),x86_64 arm64),)
+$(error ARCH must be x86_64 or arm64, not '$(ARCH)')
+endif
+
 ifeq ($(ARCH),arm64)
 KERNEL = $(BUILD_DIR)/Image
 KERNEL_ARTIFACT = arch/arm64/boot/Image
