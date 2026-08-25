@@ -138,7 +138,7 @@ partition. On a Linux machine, with `/dev/sdX` the stick:
 
 ```bash
 sudo wipefs -a /dev/sdX                      # clear old signatures
-sudo dd if=bishos-x86_64_v0.8.0.iso of=/dev/sdX bs=4M conv=fsync
+sudo dd if=bishos-x86_64_v0.9.0.iso of=/dev/sdX bs=4M conv=fsync
 sudo sgdisk -e /dev/sdX                      # see below
 sudo sgdisk -n 0:0:0 -t 0:8300 /dev/sdX      # claim the free space
 sudo mkfs.ext4 -L BISHOS /dev/sdX3           # check the real partition name first
@@ -163,8 +163,8 @@ of whatever machine it is booted on.
 4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
    the same `grub.cfg`; only the kernel binary differs:
    ```bash
-   make ARCH=arm64 iso   # -> output/arm64/bishos-arm64_v0.8.0.iso   (UEFI)
-   make iso              # -> output/x86_64/bishos-x86_64_v0.8.0.iso (UEFI + BIOS)
+   make ARCH=arm64 iso   # -> output/arm64/bishos-arm64_v0.9.0.iso   (UEFI)
+   make iso              # -> output/x86_64/bishos-x86_64_v0.9.0.iso (UEFI + BIOS)
    ```
    `VERSION` in the Makefile is the single source of truth: it names the ISO
    and is compiled into init's banner, so a booted system always reports the
@@ -193,8 +193,8 @@ of whatever machine it is booted on.
    [tagged releases](https://github.com/bishalramdam/BishOS/releases), and
    published to GitHub Packages as OCI artifacts:
    ```bash
-   oras pull ghcr.io/bishalramdam/bishos:0.8.0-arm64
-   oras pull ghcr.io/bishalramdam/bishos:0.8.0-x86_64
+   oras pull ghcr.io/bishalramdam/bishos:0.9.0-arm64
+   oras pull ghcr.io/bishalramdam/bishos:0.9.0-x86_64
    ```
    In VMware Fusion: New VM -> drag the ISO in -> "Other Linux 6.x 64-bit Arm".
    The same shell lands on the serial port in QEMU and on the screen in
@@ -321,6 +321,19 @@ of whatever machine it is booted on.
         shutdown: an interactive shell ignores `SIGTERM` by design, and
         `SIGHUP` is what actually means "your terminal is going away"
 
+- [x] **Phase 12: A Screen That Stays On**
+  - [x] `DRM_FBDEV_EMULATION`, `DRM_SIMPLEDRM` and `SYSFB_SIMPLEFB`. x86_64's
+        defconfig builds `DRM_I915` in, and a DRM driver evicts the firmware
+        framebuffer when it probes -- without these it then provides no
+        console, so on any machine with Intel graphics the screen lights up,
+        the driver loads, and it goes black
+  - [x] Invisible to every test: QEMU has no Intel GPU, so `i915` never
+        probes, `efifb` is never evicted, and CI passed for four releases
+        while the ISO was unusable on the hardware it was built for
+  - [x] Boot menu entries for diagnosing it on a machine you cannot iterate
+        on: `nomodeset` to rule graphics in or out, and `quiet` dropped so the
+        boot narrates itself
+
 ## 📂 Project Layout
 
 ```
@@ -354,9 +367,9 @@ of whatever machine it is booted on.
 │       └── bishos-disk.img  # Persistent ext4 root (survives rebuilds)
 ├── output/             # Finished ISOs, gitignored. make clean leaves these
 │   ├── x86_64/
-│   │   └── bishos-x86_64_v0.8.0.iso
+│   │   └── bishos-x86_64_v0.9.0.iso
 │   └── arm64/
-│       └── bishos-arm64_v0.8.0.iso
+│       └── bishos-arm64_v0.9.0.iso
 └── README.md
 ```
 

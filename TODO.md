@@ -45,6 +45,13 @@ Ordered by how much it changes what the OS *is*, not by effort.
 - `gcompat` on every persistent root, so prebuilt glibc binaries run instead
   of failing with `not found` for a file that is plainly there. Documented
   alongside `readelf -l`, which is how to recognise the failure elsewhere
+- A display console that survives the GPU driver loading: `DRM_FBDEV_EMULATION`
+  and friends, without which `i915` evicts the firmware framebuffer on a real
+  PC and replaces it with nothing. Boot menu gained `nomodeset` and verbose
+  entries to tell a graphics fault from any other kind
+- Finished ISOs in `output/<arch>/`, left alone by `make clean`
+- An unknown `ARCH` is rejected before anything runs, rather than falling
+  through to x86_64 and failing much later inside the kernel's own Makefile
 
 ---
 
@@ -91,6 +98,9 @@ Nothing here changes what the OS is. It is a list of small good ideas.
 - **Minimal kernel config.** Still stock `defconfig` (14 MB x86_64,
   41 MB arm64). `make menuconfig`, cut one subsystem per boot test, then
   `make savedefconfig` and track the result as `config/bishos_defconfig`.
+  Worth more than size: the blank-screen bug lived in a 5,525-line `.config`
+  that exists only inside a Docker volume, regenerated from upstream defaults
+  every build and never seen. Tracking it would have made that bug a diff.
 - **LICENSE file.** Missing, and it matters the moment anyone reads the repo.
   MIT or GPL-2.0 (the latter is thematic for a Linux project).
 - **README "what I learned".** The parts other people find interesting: PID 1
@@ -98,7 +108,10 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   trap, why `/dev/console` is not a terminal a shell can hand back, static vs
   dynamic linking and the musl loader, and the fact that `chown` silently
   drops the setuid bit.
-- **Multiple TTYs.** One console session only.
+- **Multiple TTYs.** One console session only. Now actually possible: virtual
+  terminals need a working display console, which is what the DRM fix
+  provides, so this becomes a `console` line per `tty1`..`tty6` in the service
+  table rather than something the kernel cannot do.
 - **Untested paths.** The x86_64 ISO has been tried on real hardware and the
   screen stayed black -- diagnosed as the DRM console gap and fixed, but the
   fix itself has not been confirmed on the machine yet. The ghcr.io push has
