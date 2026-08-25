@@ -29,9 +29,10 @@ Ordered by how much it changes what the OS *is*, not by effort.
 - Accounts: `/etc/shadow` ships locked, the first boot on a persistent root
   asks for the two passwords, and the console runs `login` rather than a bare
   root shell. `sudo` on the disk gives `wheel` a way back to root
-- Remote access: `sshd` runs from the service table, generating its host keys
-  on the machine at first start. Root may not log in over the network;
-  `make run` forwards a host port so the guest is reachable
+- Remote access: `sshd` runs from the service table but stays off until
+  `/etc/bishos/ssh.enabled` exists, generating its host keys on the machine
+  the first time it is actually turned on. Root may not log in over the
+  network; `make run` forwards a host port so the guest is reachable
 - Service output: init gives every non-console service a pipe and forwards
   what it prints to syslogd under that service's own name, so a daemon that
   never calls syslog(3) still ends up in `/var/log/messages`

@@ -36,10 +36,10 @@ klogd     respawn   /sbin/klogd -n
 # runs a script that writes the corrected time back to the hardware clock.
 ntpd      respawn   /sbin/ntpd -n -S /etc/bishos/ntp-step -p 0.pool.ntp.org -p 1.pool.ntp.org
 
-# Remote access. The wrapper generates host keys on this machine the first
-# time it runs -- an ISO carrying a host key would put the same private key on
-# every BishOS install -- and steps aside quietly on a RAM-only boot, which
-# has neither the package nor any accounts to let in.
+# Remote access, off until asked for. The wrapper waits for
+# /etc/bishos/ssh.enabled and only then generates host keys and listens, so a
+# machine that never wants ssh never opens port 22 and never has a host key
+# sitting on it.  Turn it on with:  sudo touch /etc/bishos/ssh.enabled
 sshd      respawn   /bin/sh /etc/bishos/sshd
 
 # Examples, once the packages are installed:

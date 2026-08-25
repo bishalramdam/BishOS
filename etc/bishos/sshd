@@ -1,26 +1,39 @@
 #!/bin/sh
-# sshd, started from the service table.
+# sshd, started from the service table -- but only when you have asked for it.
+#
+# A network service that listens because it happens to be installed is a
+# service nobody decided to run. BishOS accepts connections on port 22 only
+# while this file exists:
+FLAG=/etc/bishos/ssh.enabled
+#
+#   sudo touch /etc/bishos/ssh.enabled            start it, now and at boot
+#   sudo rm /etc/bishos/ssh.enabled && sudo pkill sshd     stop it, for good
+#
+# The flag lives on the root filesystem, so the answer survives a reboot --
+# and a RAM-only boot can never have one, which is the behaviour wanted there
+# anyway: an ISO has no accounts to let anybody into.
 
-# openssh is a package on the persistent root, not part of the base system:
-# busybox has no ssh server, and the real one is dynamically linked, so it
-# could not live in the static initramfs even if it were wanted there. A
-# RAM-only boot therefore has no sshd -- and no accounts to let anyone into
-# either, since it deliberately skips login.
+# Wait rather than exit. Exiting would have the supervisor restart this every
+# thirty seconds for as long as the machine is up; waiting here costs one
+# sleeping process and means creating the flag starts sshd within a few
+# seconds, with no reboot. Removing the flag and killing sshd lands back here.
+while [ ! -f "$FLAG" ]; do
+    sleep 5
+done
+
 if [ ! -x /usr/sbin/sshd ]; then
-    echo "[BishOS] sshd: openssh not installed (apk add openssh-server)"
-    # Sleep rather than exit. Exiting would have the supervisor restart this
-    # every thirty seconds forever, and the message would scroll a live ISO
-    # console for as long as it was left running.
+    echo "[BishOS] sshd: enabled, but openssh is not installed"
+    echo "[BishOS] sshd: run 'sudo apk add openssh-server' and it will start"
     exec sleep 86400
 fi
 
-# Host keys are generated here, on the machine, the first time it boots --
-# never shipped in the image. A host key baked into an ISO is the same private
-# key on every BishOS install in the world, which is precisely the thing host
-# keys exist to prevent. -A creates only what is missing, so later boots are
-# a no-op.
+# Host keys are generated here, on the machine, the first time sshd is
+# actually asked for -- never shipped in the image, and never generated for a
+# machine that never turns ssh on. A host key baked into an ISO is the same
+# private key on every BishOS install, which is what host keys exist to
+# prevent. -A creates only what is missing, so later starts are a no-op.
 ssh-keygen -A
 
 # -D keeps sshd in the foreground so the supervisor can see it exit; -e sends
-# its log to stderr rather than syslog.
+# its log to stderr, which init forwards to syslogd.
 exec /usr/sbin/sshd -D -e

@@ -93,12 +93,19 @@ Builds for **two architectures** from the same source:
    BishOS disk attached) drops straight into a root shell instead, because
    nothing written to `/etc` there would survive to be asked for again.
 
-4. **SSH in** from another terminal on the host:
+4. **SSH in**, once you have asked for it. BishOS does not listen on port 22
+   until you say so. In the guest:
+   ```bash
+   sudo touch /etc/bishos/ssh.enabled
+   ```
+   Then from another terminal on the host:
    ```bash
    ssh -p 2222 bishal@localhost
    ```
-   `make run` forwards that port into the guest. Root is refused over SSH by
-   design -- log in as `bishal` and use `sudo`.
+   `make run` forwards that port into the guest. The answer is remembered
+   across reboots, and `sudo rm /etc/bishos/ssh.enabled && sudo pkill sshd`
+   takes it back. Root is refused over SSH by design -- log in as `bishal`
+   and use `sudo`.
 
 5. **Exit QEMU**:
    Press `Ctrl + A`, release, then press `X`.
@@ -283,9 +290,14 @@ of whatever machine it is booted on.
 - [x] **Phase 10: Remote Access**
   - [x] `sshd` supervised from the service table, on a machine that already
         had the two things it needs: ptys, and passwords to check
-  - [x] Host keys generated on the machine at first start, never shipped in
-        the image -- a host key in an ISO is the same private key on every
-        install, which is the one thing host keys exist to prevent
+  - [x] **Off until asked for.** A service that listens because it happens to
+        be installed is a service nobody decided to run. Port 22 opens only
+        while `/etc/bishos/ssh.enabled` exists, the answer survives reboots,
+        and it takes effect in seconds without one
+  - [x] Host keys generated on the machine the first time ssh is actually
+        turned on -- never shipped in the image, and never generated at all
+        for a machine that never wants them. A host key in an ISO is the same
+        private key on every install, which is what host keys exist to prevent
   - [x] `PermitRootLogin no`, via a `/etc/ssh/sshd_config.d` drop-in that
         survives reinstalling the package. `root` is the account name every
         scanner tries first, and `bishal` plus `sudo` is a better road in

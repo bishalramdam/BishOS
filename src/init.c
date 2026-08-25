@@ -714,7 +714,11 @@ int main(int argc, char **argv) {
               "Anything needing root goes through sudo, including shutdown:\n"
               "  - sudo apk add python3   (install software)\n"
               "  - sudo poweroff          (plain 'poweroff' is not yours to run)\n"
-              "  - passwd                 (change your own password)\n");
+              "  - passwd                 (change your own password)\n\n"
+              "SSH is installed but not listening. It starts only when you\n"
+              "say so, and the answer survives reboots:\n"
+              "  - sudo touch /etc/bishos/ssh.enabled          (start it)\n"
+              "  - sudo rm /etc/bishos/ssh.enabled && sudo pkill sshd  (stop)\n");
 
     // 9. Bring up networking. DHCP first: QEMU's SLIRP, VMware's NAT, and real
     // routers all run DHCP servers, so one code path serves every host. Only
