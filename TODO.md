@@ -1,13 +1,13 @@
 # BishOS TODO
 
-Where the system stands after v0.4.0, and what is left. Everything in
+Where the system stands after v0.7.0, and what is left. Everything in
 "Done" boots and is verified; everything below it is not started.
 
 Ordered by how much it changes what the OS *is*, not by effort.
 
 ---
 
-## Done (v0.4.0)
+## Done (v0.7.0)
 
 - Linux 6.18.46 LTS compiled from source, pinned by SHA-256, x86_64 + arm64
 - Custom C PID 1: mounts pseudo-filesystems, reaps orphans, controlling TTY
@@ -26,33 +26,21 @@ Ordered by how much it changes what the OS *is*, not by effort.
   time back to the hardware clock, so the next boot starts right
 - Logging: `syslogd` and `klogd` run as services, so the kernel log lands in
   `/var/log/messages` on the persistent root and outlives a reboot
+- Accounts: `/etc/shadow` ships locked, the first boot on a persistent root
+  asks for the two passwords, and the console runs `login` rather than a bare
+  root shell. `sudo` on the disk gives `wheel` a way back to root
 
 ---
 
-## 1. The remaining real gap
+## 1. Robustness
 
-What separates "an OS I boot" from "a system someone could run".
+### 1.1 No remote access
+Console only. Everything sshd needs now exists: `/dev/pts` for ptys, a
+service table to keep it running, and real passwords for it to check. The
+remaining work is `apk add openssh`, generating host keys, and an
+`sshd respawn` line in the table.
 
-### 1.1 No authentication
-`/etc/passwd` has `x` in the password field but **there is no `/etc/shadow`**,
-so that `x` points at nothing. Anyone at the console is root, and
-`su - bishal` needs no password. There is also no `login`/`getty` -- init
-drops straight into a root shell.
-
-- Create `/etc/shadow` with hashed passwords (`mkpasswd -m sha512`)
-- Decide whether init execs `getty` (which runs `login`) instead of `sh -l`
-
----
-
-## 2. Robustness
-
-### 2.1 No remote access
-Console only. `/dev/pts` now exists, so the remaining work is
-`apk add openssh`, generating host keys, and a `sshd respawn` line in the
-service table. Passwords (1.1) matter here too -- sshd will refuse to let
-root in without one.
-
-### 2.2 Nothing ever runs fsck -- considered and declined
+### 1.2 Nothing ever runs fsck -- considered and declined
 Less urgent than it looks: ext4 journals, and the kernel replays that journal
 at mount, so the ordinary power-loss case already repairs itself. What fsck
 would add is catching structural damage the journal cannot cover, and running
@@ -66,7 +54,7 @@ libraries and the musl loader -- costs about 870KB compressed, which would
 roughly double a 1.1MB initramfs that is loaded into RAM in full on every
 boot. Not worth it for a check the journal already covers.
 
-### 2.4 Service output is not logged
+### 1.3 Service output is not logged
 `syslogd` and `klogd` now persist the kernel log, but syslog only ever sees
 messages a program deliberately sends it. Services started from the table
 inherit init's stdout, which is the console -- so their output, and init's
@@ -77,7 +65,7 @@ own `[BishOS]` lines, scroll past and are gone.
 
 ---
 
-## 3. Polish and learning
+## 2. Polish and learning
 
 - **Minimal kernel config.** Still stock `defconfig` (14 MB x86_64,
   41 MB arm64). `make menuconfig`, cut one subsystem per boot test, then
@@ -103,12 +91,13 @@ own `[BishOS]` lines, scroll past and are gone.
 
 ## Suggested order
 
-**1.1 → 2.1.** (`/dev/pts` and the service table are done.)
-
-Passwords, then sshd. Between them that turns BishOS from "an OS I boot and
-type into" into "a machine I can log into that runs things", and the pieces
-they need -- ptys and something to keep a daemon running -- now exist.
+**1.1, sshd.** Passwords landed in v0.7.x, and they were the half sshd was
+waiting on -- it refuses to let anyone in without one. With ptys, a
+supervisor and accounts all in place, remote access is now a package and one
+line in the service table, and it is what turns BishOS from "a machine in
+front of me" into "a machine I can reach".
 
 Worth remembering: this is a learning project, and it is allowed to be
-finished. v0.4.0 boots on real hardware and installs Python. Everything above
-is a roadmap, not a debt.
+finished. It boots on real hardware, installs Python, supervises services,
+keeps its own clock and logs across reboots, and now asks who you are.
+Everything above is a roadmap, not a debt.

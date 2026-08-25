@@ -427,7 +427,7 @@ static void service_exited(pid_t pid, int status) {
             s->failures = 0;
             s->retry_after = 0;
             if (s->action == ACT_CONSOLE) {
-                printf("\n[BishOS] Shell session ended. Respawning shell...\n\n");
+                printf("\n[BishOS] Console session ended. Starting a new one...\n\n");
             } else {
                 printf("[BishOS] %s exited, restarting\n", s->name);
             }
@@ -507,6 +507,12 @@ int main(int argc, char **argv) {
     setenv("USER", "root", 1);
     setenv("TERM", "xterm-256color", 1);
 
+    // Which root this is, for the console service to read. A RAM-only boot
+    // rebuilds /etc from the initramfs every time, so a password set there
+    // would not survive to be asked for -- the console script skips accounts
+    // entirely in that case rather than locking a live session out of itself.
+    setenv("BISHOS_PERSISTENT", real_root ? "1" : "0", 1);
+
     // 8. Seed welcome notes (once -- see seed_file)
     seed_file("/root/welcome.txt", 0,
               "Welcome to BishOS (Root Mode)!\n\n"
@@ -562,7 +568,14 @@ int main(int argc, char **argv) {
     printf("\n");
     printf("Storage:    %s\n", storage);
     printf("Networking: %s (DNS: 8.8.8.8)\n", net_mode);
-    printf("User accounts: root, bishal (switch with: 'su - bishal')\n");
+    // Say what this boot actually offers. The two paths differ: a persistent
+    // root has accounts and a login prompt, a RAM-only one deliberately has
+    // neither, and telling an ISO user to log in would strand them.
+    if (real_root) {
+        printf("Accounts:   log in as 'bishal'; 'sudo' for root\n");
+    } else {
+        printf("Accounts:   none on a RAM-only boot -- this console is root\n");
+    }
     printf("To cleanly shut down the OS, run: poweroff\n\n");
 
     // 12. Supervise. Load the service table, start everything in it, then

@@ -1,0 +1,44 @@
+#!/bin/sh
+# The console session, run by init as the "console" service -- which means it
+# owns the controlling terminal and can therefore prompt, echo off, and run
+# login. init respawns it, so returning from here starts a fresh session.
+
+# A RAM-only boot has nothing to remember a password in: /etc is a copy in
+# RAM that the next boot rebuilds from the initramfs. Asking there would ask
+# again every single boot, and refusing to log in without one would lock the
+# live session out of itself. So the ISO behaves as BishOS always has, and
+# only a persistent root gets accounts.
+if [ "$BISHOS_PERSISTENT" != "1" ]; then
+    exec /bin/sh -l
+fi
+
+# "root:!" is the locked marker that ships in /etc/shadow, so finding it means
+# nobody has set a password on this disk yet.
+if grep -q '^root:!' /etc/shadow 2>/dev/null; then
+    echo
+    echo "=========================================="
+    echo "   First boot: choose your passwords"
+    echo "=========================================="
+    echo
+    echo "Both accounts are locked until you set one. You are asked once;"
+    echo "the answers are written to /etc/shadow on this disk."
+    echo
+    echo "  root   -- full control, used by sudo"
+    echo "  bishal -- the account you log in as"
+    echo
+
+    # Loop rather than give up: passwd exits non-zero when the two entries
+    # differ or the password is rejected, and a half-finished setup would
+    # leave an account nobody can reach.
+    for user in root bishal; do
+        while ! passwd "$user"; do
+            echo "Not set -- try again."
+        done
+        echo
+    done
+
+    echo "Done. Log in as 'bishal' below."
+    echo
+fi
+
+exec /bin/login

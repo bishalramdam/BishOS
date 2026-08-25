@@ -82,7 +82,18 @@ Builds for **two architectures** from the same source:
    make ARCH=arm64 run   # arm64 (near-native speed on Apple Silicon)
    ```
 
-3. **Exit QEMU**:
+3. **First boot** asks you to choose a password for `root` and for `bishal`,
+   then shows a login prompt. Log in as `bishal`; use `sudo` when you need
+   root:
+   ```bash
+   sudo apk add python3     # install something
+   sudo su                  # become root
+   ```
+   Only a persistent root has accounts. A RAM-only boot (the ISO with no
+   BishOS disk attached) drops straight into a root shell instead, because
+   nothing written to `/etc` there would survive to be asked for again.
+
+4. **Exit QEMU**:
    Press `Ctrl + A`, release, then press `X`.
 
    The disk at `build/$ARCH/bishos-disk.img` persists across boots and is
@@ -202,6 +213,19 @@ of whatever machine it is booted on.
         certificate *dates* -- a wrong clock fails looking like a CA problem
   - [x] Kernel log persisted to `/var/log/messages` by `syslogd` and `klogd`,
         capped by rotation so a log cannot fill the root filesystem
+- [x] **Phase 9: Accounts**
+  - [x] `/etc/shadow` ships *locked* -- `!`, not a hash -- so no default
+        password is ever committed, and nothing can log in until one is set
+  - [x] First boot on a persistent root asks for the `root` and `bishal`
+        passwords once, and writes SHA-512 crypt hashes to `/etc/shadow`
+  - [x] The console runs `login`, not a root shell, so a session starts by
+        saying who you are
+  - [x] `sudo` on the disk, with `wheel` allowed in a `/etc/sudoers.d`
+        drop-in. It lives on the root and not in the initramfs because
+        busybox has no `sudo` applet and the real one is dynamically linked
+  - [x] A RAM-only boot deliberately keeps the old root shell: `/etc` there
+        is rebuilt from the initramfs every boot, so a password set on the
+        ISO could never be asked for again
   - [x] Installs dynamically-linked software: the first package pulls in
         `musl`, which provides the loader the whole repository needs
 - [x] **Phase 7: Persistent Root Filesystem**

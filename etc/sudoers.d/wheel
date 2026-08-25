@@ -1,0 +1,6 @@
+# Members of wheel may run anything, after proving who they are. /etc/group
+# already lists root and bishal there.
+#
+# A drop-in rather than an edit to /etc/sudoers, because /etc/sudoers arrives
+# with the sudo package and would lose the change on any reinstall.
+%wheel ALL=(ALL) ALL

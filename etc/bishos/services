@@ -12,7 +12,11 @@
 # A service that dies immediately is retried with a growing delay rather
 # than in a tight loop, so a broken command cannot peg the CPU.
 
-console   console   /bin/sh -l
+# The console session. Not a shell directly any more: the script decides
+# whether this boot needs first-boot password setup, then hands over to
+# login. "console" is what gives it the controlling terminal it needs to
+# prompt with echo off.
+console   console   /bin/sh /etc/bishos/console
 
 # Logging. dmesg is a ring buffer in RAM: it is overwritten as it fills and is
 # gone entirely at reboot, so nothing from a previous boot can be read back.

@@ -72,7 +72,7 @@ rootfs:
 		         /work/$(ROOTFS_DIR)/dev /work/$(ROOTFS_DIR)/root \
 		         /work/$(ROOTFS_DIR)/home/bishal /work/$(ROOTFS_DIR)/tmp \
 		         /work/$(ROOTFS_DIR)/etc /work/$(ROOTFS_DIR)/usr/share/udhcpc \
-		         /work/$(ROOTFS_DIR)/etc/ssl/certs && \
+		         /work/$(ROOTFS_DIR)/etc/ssl/certs /work/$(ROOTFS_DIR)/var/log && \
 		gcc -static -O2 -DBISHOS_VERSION=$(VERSION) /work/src/init.c -o /work/$(ROOTFS_DIR)/init && \
 		cp /bin/busybox.static /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod +x /work/$(ROOTFS_DIR)/bin/busybox && \
@@ -87,7 +87,9 @@ rootfs:
 		find /work/$(ROOTFS_DIR) -type d -exec chmod 755 {} + && \
 		find /work/$(ROOTFS_DIR)/etc -type f -exec chmod 644 {} + && \
 		chmod 755 /work/$(ROOTFS_DIR)/etc/udhcpc/default.script /work/$(ROOTFS_DIR)/usr/share/udhcpc/default.script && \
-		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/ntp-step && \
+		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/ntp-step /work/$(ROOTFS_DIR)/etc/bishos/console && \
+		chmod 600 /work/$(ROOTFS_DIR)/etc/shadow && \
+		chmod 440 /work/$(ROOTFS_DIR)/etc/sudoers.d/wheel && \
 		chmod 755 /work/$(ROOTFS_DIR)/init /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod 700 /work/$(ROOTFS_DIR)/root && \
 		chmod 1777 /work/$(ROOTFS_DIR)/tmp"
@@ -121,7 +123,13 @@ kernel:
 		mkdir -p /src/$(BUILD_DIR) && cp /kbuild/build-$(ARCH)/$(KERNEL_ARTIFACT) /src/$(KERNEL)"
 
 # 4. Create the persistent root filesystem: a raw ext4 disk image populated
-# from the same rootfs staging tree, plus the apk package manager.
+# from the same rootfs staging tree, plus the apk package manager and sudo.
+#
+# sudo is installed here and not in the initramfs for the same reason apk is:
+# busybox has no sudo applet, and the real one is dynamically linked, so it
+# would drag the musl loader into an image that is otherwise entirely static.
+# Note the chmod 4755 after the recursive chown -- chown drops the setuid bit,
+# and sudo without setuid refuses to run at all.
 #
 # apk goes on the disk and NOT in the initramfs, for two reasons: the
 # initramfs is loaded into RAM in full on every boot so every megabyte is a
@@ -148,9 +156,10 @@ disk: rootfs
 				'https://dl-cdn.alpinelinux.org/alpine/$(ALPINE_RELEASE)/community' \
 				> /diskroot/etc/apk/repositories && \
 			rm -rf /diskroot/etc/ssl && \
-			/sbin/apk.static --root /diskroot --initdb add alpine-baselayout-data ca-certificates-bundle > /dev/null && \
+			/sbin/apk.static --root /diskroot --initdb add alpine-baselayout-data ca-certificates-bundle sudo > /dev/null && \
 			chown -R 0:0 /diskroot && \
 			chmod 1777 /diskroot/tmp && chmod 700 /diskroot/root && \
+			chmod 4755 /diskroot/usr/bin/sudo && \
 			truncate -s $(DISK_SIZE) /work/$(DISK) && \
 			mke2fs -t ext4 -F -L BISHOS -d /diskroot /work/$(DISK) > /dev/null && \
 			echo done"; \
