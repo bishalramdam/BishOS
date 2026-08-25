@@ -163,8 +163,8 @@ of whatever machine it is booted on.
 4. **Build a bootable ISO** -- GRUB on both architectures, same layout and
    the same `grub.cfg`; only the kernel binary differs:
    ```bash
-   make ARCH=arm64 iso   # -> output/bishos-arm64_v0.8.0.iso   (UEFI)
-   make iso              # -> output/bishos-x86_64_v0.8.0.iso (UEFI + BIOS)
+   make ARCH=arm64 iso   # -> output/arm64/bishos-arm64_v0.8.0.iso   (UEFI)
+   make iso              # -> output/x86_64/bishos-x86_64_v0.8.0.iso (UEFI + BIOS)
    ```
    `VERSION` in the Makefile is the single source of truth: it names the ISO
    and is compiled into init's banner, so a booted system always reports the
@@ -353,8 +353,10 @@ of whatever machine it is booted on.
 │       ├── initramfs.cpio.gz
 │       └── bishos-disk.img  # Persistent ext4 root (survives rebuilds)
 ├── output/             # Finished ISOs, gitignored. make clean leaves these
-│   ├── bishos-x86_64_v0.8.0.iso
-│   └── bishos-arm64_v0.8.0.iso
+│   ├── x86_64/
+│   │   └── bishos-x86_64_v0.8.0.iso
+│   └── arm64/
+│       └── bishos-arm64_v0.8.0.iso
 └── README.md
 ```
 

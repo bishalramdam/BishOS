@@ -253,9 +253,10 @@ disk-reset:
 # Finished ISOs go to output/, not build/. build/ is scratch -- staging trees,
 # object files, disk images -- and make clean is entitled to delete all of it.
 # The ISO is the one thing here anyone takes away, so it lives somewhere it
-# can be found without knowing how the build is laid out. The filename already
-# carries the architecture and version, so both arches share the directory.
-OUTPUT_DIR = output
+# can be found without knowing how the build is laid out, split by
+# architecture so it is obvious which stick to write which file to.
+OUTPUT_ROOT = output
+OUTPUT_DIR = $(OUTPUT_ROOT)/$(ARCH)
 ISO = $(OUTPUT_DIR)/bishos-$(ARCH)_v$(VERSION).iso
 
 iso: all
@@ -300,5 +301,7 @@ print-version:
 clean:
 	rm -rf build
 
+# Every architecture, not just the one ARCH names -- otherwise "clean" would
+# leave half the ISOs behind and look like it had failed.
 clean-output:
-	rm -rf $(OUTPUT_DIR)
+	rm -rf $(OUTPUT_ROOT)
