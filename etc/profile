@@ -24,13 +24,13 @@ case ":$PATH:" in
     *) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
 
-# Fancy colored shell prompt:
-# Green for root: [root@BishOS ~]#
-# Cyan for normal users: [bishal@BishOS ~]$
+# Fancy colored shell prompt. \h is the real hostname rather than a literal,
+# so a machine renamed on first boot says its own name at every prompt.
+# Green for root, cyan for everyone else.
 if [ "$(id -u)" = "0" ]; then
-    export PS1='\[\033[01;32m\]\u@BishOS\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]# '
+    export PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]# '
 else
-    export PS1='\[\033[01;36m\]\u@BishOS\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$ '
+    export PS1='\[\033[01;36m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$ '
 fi
 
 # Useful shell aliases

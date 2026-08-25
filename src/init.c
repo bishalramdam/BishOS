@@ -636,6 +636,30 @@ static void service_exited(pid_t pid, int status) {
 // coming from DHCP -- and a banner that states the wrong resolver is worse
 // than one that says nothing, because it is the first thing consulted when
 // name lookups misbehave.
+// The everyday account's name, for the banner. No name is compiled in any
+// more -- one is chosen on the first boot -- so the only way to say who to
+// log in as is to look for the first entry with an ordinary user's uid.
+static void first_user(char *out, size_t outsz) {
+    char line[512];
+    FILE *f = fopen("/etc/passwd", "r");
+
+    out[0] = '\0';
+    if (!f) {
+        return;
+    }
+    while (fgets(line, sizeof line, f)) {
+        char name[64];
+        unsigned uid;
+
+        if (sscanf(line, "%63[^:]:%*[^:]:%u:", name, &uid) == 2
+                && uid >= 1000 && uid < 65534) {
+            snprintf(out, outsz, "%s", name);
+            break;
+        }
+    }
+    fclose(f);
+}
+
 static void first_nameserver(char *out, size_t outsz) {
     char line[256];
     FILE *f = fopen("/etc/resolv.conf", "r");
@@ -731,13 +755,38 @@ int main(int argc, char **argv) {
     mkdir("/var", 0755);
     mkdir("/var/log", 0755);
 
-    // 5. Home directory for the unprivileged user
+    // 5. Somewhere for home directories. The accounts themselves are not
+    // created here: there is no user in the shipped /etc/passwd, because an
+    // image carrying its author's username puts a stranger's name on somebody
+    // else's machine. The first boot asks for one and adduser makes it.
     mkdir("/home", 0755);
-    mkdir("/home/bishal", 0755);
-    chown("/home/bishal", 1000, 1000);
 
     // 6. Set hostname
-    sethostname("BishOS", 6);
+    {
+        // Read from /etc/hostname rather than compiled in, so the name chosen
+        // on the first boot is the name the machine actually answers to.
+        // BishOS remains the default, and the fallback if the file is gone.
+        char host[65] = "BishOS";
+        FILE *f = fopen("/etc/hostname", "r");
+
+        if (f) {
+            char line[128];
+
+            if (fgets(line, sizeof line, f)) {
+                size_t n = strcspn(line, " \t\r\n");
+
+                // Explicit bounds rather than snprintf: a hostname longer
+                // than the buffer is a broken file, not something to
+                // silently truncate into a name the machine half-answers to.
+                if (n > 0 && n < sizeof host && line[0] != '#') {
+                    memcpy(host, line, n);
+                    host[n] = '\0';
+                }
+            }
+            fclose(f);
+        }
+        sethostname(host, strlen(host));
+    }
 
     // 7. Set base environment variables
     setenv("PATH", "/bin:/sbin:/usr/bin:/usr/sbin", 1);
@@ -758,21 +807,11 @@ int main(int argc, char **argv) {
               "  - ping -c 3 8.8.8.8\n"
               "  - wget -qO- http://icanhazip.com\n"
               "  - df -h /            (is this root persistent?)\n"
-              "  - su - bishal (switch to normal user)\n"
+              "  - tail /var/log/messages   (what the services have said)\n"
               "  - poweroff\n");
-    seed_file("/home/bishal/welcome.txt", 1000,
-              "Welcome to BishOS, Bishal!\n\n"
-              "You are in your own home directory: /home/bishal\n"
-              "You have full read/write permissions here.\n"
-              "Try: touch myfile.txt && echo 'Hello BishOS' > myfile.txt\n\n"
-              "Anything needing root goes through sudo, including shutdown:\n"
-              "  - sudo apk add python3   (install software)\n"
-              "  - sudo poweroff          (plain 'poweroff' is not yours to run)\n"
-              "  - passwd                 (change your own password)\n\n"
-              "SSH is installed but not listening. It starts only when you\n"
-              "say so, and the answer survives reboots:\n"
-              "  - sudo touch /etc/bishos/ssh.enabled          (start it)\n"
-              "  - sudo rm /etc/bishos/ssh.enabled && sudo pkill sshd  (stop)\n");
+    // The user's own welcome note is written by the console script at the
+    // moment the account is created, since only then is there a name and a
+    // home directory to write it to.
 
     // 9. Bring up networking, from /etc/bishos/net-up if it is there.
     //
@@ -840,7 +879,14 @@ int main(int argc, char **argv) {
     // root has accounts and a login prompt, a RAM-only one deliberately has
     // neither, and telling an ISO user to log in would strand them.
     if (real_root) {
-        printf("Accounts:   log in as 'bishal'; 'sudo' for root\n");
+        char user[64];
+
+        first_user(user, sizeof user);
+        if (user[0] != '\0') {
+            printf("Accounts:   log in as '%s'; 'sudo' for root\n", user);
+        } else {
+            printf("Accounts:   none yet -- this boot will ask you to make one\n");
+        }
     } else {
         printf("Accounts:   none on a RAM-only boot -- this console is root\n");
     }

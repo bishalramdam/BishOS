@@ -59,6 +59,10 @@ Ordered by how much it changes what the OS *is*, not by effort.
 - DNS comes from the DHCP server rather than being overwritten with Google's
   on every lease, so a router's own resolver -- and the local names only it
   knows -- actually works
+- No username and no hostname in the image. The first boot asks for both,
+  defaulting to `bishal` and `BishOS`, and `adduser` creates the account and
+  puts it in `wheel`. The prompt uses `\h`, so a renamed machine says its own
+  name
 
 ---
 

@@ -17,24 +17,107 @@ fi
 if grep -q '^root:!' /etc/shadow 2>/dev/null; then
     echo
     echo "=========================================="
-    echo "   First boot: choose your passwords"
+    echo "   First boot: set this machine up"
     echo "=========================================="
     echo
-    echo "Both accounts are locked until you set one. You are asked once;"
-    echo "the answers are written to /etc/shadow on this disk."
+    echo "BishOS ships with no ordinary account and no password on root, so"
+    echo "nothing can log in until you answer the next few questions. You are"
+    echo "asked once; the answers are written to this disk."
     echo
-    echo "  root   -- full control, reached with sudo"
-    echo "  bishal -- the account you log in as"
+
+    # No username is baked into the image. Shipping one would put whoever
+    # built the ISO on somebody else's machine, and leave them typing a
+    # stranger's name at every login.
+    while :; do
+        printf "Username for your account [bishal]: "
+        read -r NEWUSER
+        [ -z "$NEWUSER" ] && NEWUSER=bishal
+
+        case "$NEWUSER" in
+            root)
+                echo ">> root already exists; this is the everyday account."
+                continue ;;
+            *[!a-z0-9_-]*)
+                echo ">> Lowercase letters, digits, - and _ only."
+                continue ;;
+            [!a-z_]*)
+                echo ">> Must start with a letter or an underscore."
+                continue ;;
+        esac
+        if grep -q "^$NEWUSER:" /etc/passwd 2>/dev/null; then
+            echo ">> $NEWUSER already exists."
+            continue
+        fi
+        break
+    done
+
+    # The machine's own name, for the same reason as the username: an image
+    # that insists on being called BishOS is somebody else's machine.
+    while :; do
+        printf "Hostname for this machine [BishOS]: "
+        read -r NEWHOST
+        [ -z "$NEWHOST" ] && NEWHOST=BishOS
+
+        case "$NEWHOST" in
+            *[!A-Za-z0-9-]*)
+                echo ">> Letters, digits and hyphens only."
+                continue ;;
+            -*|*-)
+                echo ">> Cannot start or end with a hyphen."
+                continue ;;
+        esac
+        break
+    done
+
+    echo "$NEWHOST" > /etc/hostname
+    hostname "$NEWHOST" 2>/dev/null
+    # Keep /etc/hosts agreeing with it, or anything resolving its own name
+    # -- sudo does, on every call -- waits for a timeout first.
+    printf '127.0.0.1   localhost %s\n::1         localhost ip6-localhost ip6-loopback\n' \
+        "$NEWHOST" > /etc/hosts
     echo
-    echo "Rules: at least 6 characters, and not a variation of the username."
-    echo "Nothing appears as you type. That is deliberate, not a hung prompt."
-    echo "You will be asked to type each password twice."
+
+    # -D creates the account with no password, which leaves a locked shadow
+    # entry for passwd to fill in below. wheel is what sudo grants on.
+    if ! adduser -D -h "/home/$NEWUSER" -s /bin/sh "$NEWUSER" >/dev/null 2>&1; then
+        echo ">> Could not create $NEWUSER. Falling back to a root shell so"
+        echo ">> the machine is at least usable; report this."
+        exec /bin/sh -l
+    fi
+    addgroup "$NEWUSER" wheel >/dev/null 2>&1
+
+    cat > "/home/$NEWUSER/welcome.txt" <<WELCOME
+Welcome to BishOS, $NEWUSER!
+
+This is your home directory: /home/$NEWUSER
+
+Anything needing root goes through sudo, including shutdown:
+  - sudo apk add python3   (install software)
+  - sudo poweroff          (plain 'poweroff' is not yours to run)
+  - passwd                 (change your own password)
+
+SSH is installed but not listening. It starts only when you say so, and
+the answer survives reboots:
+  - sudo touch /etc/bishos/ssh.enabled          (start it)
+  - sudo rm /etc/bishos/ssh.enabled && sudo pkill sshd  (stop)
+
+The machine keeps a log of what its services said:
+  - sudo tail -20 /var/log/messages
+WELCOME
+    chown "$NEWUSER":"$NEWUSER" "/home/$NEWUSER/welcome.txt" 2>/dev/null
+
+    echo
+    echo "Created $NEWUSER on $NEWHOST, a member of wheel -- so sudo works."
+    echo
+    echo "Now the passwords. Rules: at least 6 characters, and not a"
+    echo "variation of the username. Nothing appears as you type; that is"
+    echo "deliberate, not a hung prompt. Each is asked for twice."
     echo
 
     # Loop rather than give up: passwd exits non-zero when the two entries
     # differ or the password is rejected, and a half-finished setup would
     # leave an account nobody can reach.
-    for user in root bishal; do
+    for user in root "$NEWUSER"; do
         echo "------------------------------------------"
         echo " Password for: $user"
         echo "------------------------------------------"
@@ -48,7 +131,7 @@ if grep -q '^root:!' /etc/shadow 2>/dev/null; then
         echo
     done
 
-    echo "Both done. Log in as 'bishal' below."
+    echo "Both done. Log in as '$NEWUSER' below."
     echo
 fi
 

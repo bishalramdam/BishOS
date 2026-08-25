@@ -82,9 +82,11 @@ Builds for **two architectures** from the same source:
    make ARCH=arm64 run   # arm64 (near-native speed on Apple Silicon)
    ```
 
-3. **First boot** asks you to choose a password for `root` and for `bishal`,
-   then shows a login prompt. Log in as `bishal`; use `sudo` when you need
-   root:
+3. **First boot** sets the machine up. It asks for a username (default
+   `bishal`), a hostname (default `BishOS`), and then a password for `root`
+   and for your new account. Nothing is baked into the image -- an ISO
+   carrying its author's username and machine name would put a stranger's
+   details on your computer. Then log in, and use `sudo` when you need root:
    ```bash
    sudo apk add python3     # install something
    sudo su                  # become root
@@ -100,12 +102,12 @@ Builds for **two architectures** from the same source:
    ```
    Then from another terminal on the host:
    ```bash
-   ssh -p 2222 bishal@localhost
+   ssh -p 2222 you@localhost
    ```
    `make run` forwards that port into the guest. The answer is remembered
    across reboots, and `sudo rm /etc/bishos/ssh.enabled && sudo pkill sshd`
-   takes it back. Root is refused over SSH by design -- log in as `bishal`
-   and use `sudo`.
+   takes it back. Root is refused over SSH by design -- log in as your own
+   account and use `sudo`.
 
 5. **Exit QEMU**:
    Press `Ctrl + A`, release, then press `X`.
@@ -194,8 +196,8 @@ of whatever machine it is booted on.
    sudo apk add python3     # or gcc, git, vim, curl, tmux, ...
    python3 --version
    ```
-   `sudo`, because you are logged in as `bishal` and installing software is
-   root's business. A RAM-only boot has no accounts and no `sudo`, and the
+   `sudo`, because you are logged in as an ordinary user and installing
+   software is root's business. A RAM-only boot has no accounts and no `sudo`, and the
    console there is root already.
    Installed packages survive reboots, because the root is a real disk.
    Prebuilt ISOs for both architectures are attached to every
@@ -286,8 +288,12 @@ of whatever machine it is booted on.
 - [x] **Phase 9: Accounts**
   - [x] `/etc/shadow` ships *locked* -- `!`, not a hash -- so no default
         password is ever committed, and nothing can log in until one is set
-  - [x] First boot on a persistent root asks for the `root` and `bishal`
-        passwords once, and writes SHA-512 crypt hashes to `/etc/shadow`
+  - [x] First boot on a persistent root asks for a username and a hostname,
+        creates the account with `adduser`, puts it in `wheel`, and asks for
+        both passwords once, writing SHA-512 crypt hashes to `/etc/shadow`.
+        No account and no machine name ship in the image: an OS that arrives
+        already called BishOS, with its author's username on it, is somebody
+        else's machine
   - [x] The console runs `login`, not a root shell, so a session starts by
         saying who you are
   - [x] `sudo` on the disk, with `wheel` allowed in a `/etc/sudoers.d`
@@ -310,10 +316,11 @@ of whatever machine it is booted on.
         private key on every install, which is what host keys exist to prevent
   - [x] `PermitRootLogin no`, via a `/etc/ssh/sshd_config.d` drop-in that
         survives reinstalling the package. `root` is the account name every
-        scanner tries first, and `bishal` plus `sudo` is a better road in
+        scanner tries first, and your own account plus `sudo` is a better
+        road in
   - [x] `make run` forwards host port 2222 to the guest, because QEMU's
         user-mode networking otherwise gives the guest no inbound route:
-        `ssh -p 2222 bishal@localhost`
+        `ssh -p 2222 you@localhost`
 
 - [x] **Phase 11: Logging & the Console**
   - [x] Kernel log persisted to `/var/log/messages` by `syslogd` and `klogd`,
@@ -372,14 +379,14 @@ of whatever machine it is booted on.
 │   │   ├── network     # Interface, mode, addresses, DNS policy
 │   │   ├── ntp-step    # Writes the corrected clock back to the RTC
 │   │   └── sshd        # Waits for ssh.enabled, makes host keys, runs sshd
-│   ├── passwd          # User account database (root, bishal, sshd)
+│   ├── passwd          # root and sshd only -- your account is made on first boot
 │   ├── shadow          # Ships LOCKED -- "!", never a hash. Set on first boot
 │   ├── group           # Group definitions, including wheel
 │   ├── sudoers.d/
 │   │   └── wheel       # Members of wheel may run anything, with a password
 │   ├── ssh/sshd_config.d/
 │   │   └── bishos.conf # PermitRootLogin no, as a drop-in the package cannot undo
-│   ├── hostname        # System hostname (BishOS)
+│   ├── hostname        # Machine name; chosen on first boot, BishOS by default
 │   ├── hosts           # Local loopback resolution
 │   ├── profile         # Login shell environment, aliases, colors
 │   ├── resolv.conf     # Fallback nameservers; DHCP overwrites this per lease
