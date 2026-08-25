@@ -26,13 +26,29 @@ MEMORY = 2G
 KERNEL_VERSION = 6.18.46
 KERNEL_SHA256 = f5d44b93808b02cc2969c5404ba081d97523719c9fd2ba2de6db318b4141cca0
 
-# Options defconfig does not set that we need. x86_64's defconfig ships only
-# the legacy VGA text console, which does not exist under UEFI -- the firmware
-# hands over a linear framebuffer -- so without a framebuffer console the
-# screen stays black after GRUB on real hardware. arm64 already has these;
-# setting them for both keeps the two kernels honest.
+# Options defconfig does not set that we need, all of them about one thing:
+# whether anything is on the screen after GRUB hands over.
+#
+# A monitor receives pixels, not letters, so showing text means the kernel
+# must own a framebuffer and render glyphs into it. defconfig on x86_64 gives
+# only the legacy VGA text console, which does not exist under UEFI, so the
+# first four options provide a framebuffer console instead.
+#
+# The last three are the ones that matter on a real PC, and they are why this
+# was broken for four releases while every CI run passed. defconfig builds
+# DRM_I915 in, and a DRM driver evicts the firmware framebuffer when it
+# probes -- it has to, two drivers cannot own one GPU. Without
+# DRM_FBDEV_EMULATION it then provides no console of its own, so on any
+# machine with Intel graphics the screen lights up, i915 loads, and it goes
+# black. QEMU has no Intel GPU, i915 never probes, efifb is never evicted,
+# and the fault is invisible to every test we run.
+#
+# SIMPLEDRM and SYSFB_SIMPLEFB make the early framebuffer a DRM device too,
+# so the handoff to i915 is between two drivers of the same kind rather than
+# an eviction, which is what current distributions ship.
 KERNEL_CONFIG_ENABLE = FB FB_EFI FB_VESA FRAMEBUFFER_CONSOLE \
-                       FRAMEBUFFER_CONSOLE_DETECT_PRIMARY
+                       FRAMEBUFFER_CONSOLE_DETECT_PRIMARY \
+                       DRM_FBDEV_EMULATION DRM_SIMPLEDRM SYSFB_SIMPLEFB
 
 # Reject anything that is not one of the two, before a single command runs.
 # An unknown ARCH used to fall through to the x86_64 branch below, so

@@ -99,9 +99,10 @@ Nothing here changes what the OS is. It is a list of small good ideas.
   dynamic linking and the musl loader, and the fact that `chown` silently
   drops the setuid bit.
 - **Multiple TTYs.** One console session only.
-- **Untested paths.** The x86_64 ISO has never booted on real hardware or
-  from a USB stick (the hybrid MBR is meant to support it). The ghcr.io push
-  has not been confirmed working.
+- **Untested paths.** The x86_64 ISO has been tried on real hardware and the
+  screen stayed black -- diagnosed as the DRM console gap and fixed, but the
+  fix itself has not been confirmed on the machine yet. The ghcr.io push has
+  not been confirmed working either.
 - **Swap.** None configured.
 - **Network config in files.** Addresses and DNS are decided in `init.c`
   rather than read from `/etc`.
@@ -116,10 +117,13 @@ knows who you are, can be reached over the network when asked, supervises its
 services and keeps a record of what they said. Everything remaining is
 polish, and a LICENSE file is the cheapest thing on that list.
 
-The one real gap is not code. The x86_64 ISO has never booted on real
-hardware or from a USB stick, and every tagged release carries that untested
-path -- it is the only claim the README makes that has never been checked.
-Everything else here is optional; that one is a promise outstanding.
+The one real gap is confirmation, not code. The x86_64 ISO was tried on an
+Intel desktop and the screen stayed black after GRUB; every release up to
+0.8.0 carries that. The cause is understood and fixed -- a GPU driver built
+in without a console to replace the firmware framebuffer it evicts -- but the
+fix has not yet been run on the machine that showed the fault, and QEMU
+cannot show it either way. Everything else here is optional; that one is a
+promise outstanding.
 
 Worth remembering: this is a learning project, and it is allowed to be
 finished. It boots on real hardware, installs Python, supervises services,
