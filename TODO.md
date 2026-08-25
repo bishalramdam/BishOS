@@ -29,18 +29,15 @@ Ordered by how much it changes what the OS *is*, not by effort.
 - Accounts: `/etc/shadow` ships locked, the first boot on a persistent root
   asks for the two passwords, and the console runs `login` rather than a bare
   root shell. `sudo` on the disk gives `wheel` a way back to root
+- Remote access: `sshd` runs from the service table, generating its host keys
+  on the machine at first start. Root may not log in over the network;
+  `make run` forwards a host port so the guest is reachable
 
 ---
 
 ## 1. Robustness
 
-### 1.1 No remote access
-Console only. Everything sshd needs now exists: `/dev/pts` for ptys, a
-service table to keep it running, and real passwords for it to check. The
-remaining work is `apk add openssh`, generating host keys, and an
-`sshd respawn` line in the table.
-
-### 1.2 Nothing ever runs fsck -- considered and declined
+### 1.1 Nothing ever runs fsck -- considered and declined
 Less urgent than it looks: ext4 journals, and the kernel replays that journal
 at mount, so the ordinary power-loss case already repairs itself. What fsck
 would add is catching structural damage the journal cannot cover, and running
@@ -54,7 +51,7 @@ libraries and the musl loader -- costs about 870KB compressed, which would
 roughly double a 1.1MB initramfs that is loaded into RAM in full on every
 boot. Not worth it for a check the journal already covers.
 
-### 1.3 Service output is not logged
+### 1.2 Service output is not logged
 `syslogd` and `klogd` now persist the kernel log, but syslog only ever sees
 messages a program deliberately sends it. Services started from the table
 inherit init's stdout, which is the console -- so their output, and init's
@@ -91,11 +88,14 @@ own `[BishOS]` lines, scroll past and are gone.
 
 ## Suggested order
 
-**1.1, sshd.** Passwords landed in v0.7.x, and they were the half sshd was
-waiting on -- it refuses to let anyone in without one. With ptys, a
-supervisor and accounts all in place, remote access is now a package and one
-line in the service table, and it is what turns BishOS from "a machine in
-front of me" into "a machine I can reach".
+**1.2, then whatever you feel like.** Section 1 is down to one real item:
+services still log nowhere, which is the thing you notice the first time
+something breaks while you are not watching. After that the list is polish,
+and a LICENSE file is the cheapest thing on it.
+
+The x86_64 ISO has still never booted on real hardware, and two tagged
+releases now carry that untested path. It is the only claim in the README
+that has never been checked.
 
 Worth remembering: this is a learning project, and it is allowed to be
 finished. It boots on real hardware, installs Python, supervises services,

@@ -3,3 +3,4 @@ tty:x:5:
 wheel:x:10:root,bishal
 users:x:100:bishal
 bishal:x:1000:bishal
+sshd:x:22:

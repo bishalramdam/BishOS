@@ -36,8 +36,13 @@ klogd     respawn   /sbin/klogd -n
 # runs a script that writes the corrected time back to the hardware clock.
 ntpd      respawn   /sbin/ntpd -n -S /etc/bishos/ntp-step -p 0.pool.ntp.org -p 1.pool.ntp.org
 
+# Remote access. The wrapper generates host keys on this machine the first
+# time it runs -- an ISO carrying a host key would put the same private key on
+# every BishOS install -- and steps aside quietly on a RAM-only boot, which
+# has neither the package nor any accounts to let in.
+sshd      respawn   /bin/sh /etc/bishos/sshd
+
 # Examples, once the packages are installed:
 #
-#   sshd    respawn   /usr/sbin/sshd -D -e
 #   ntpd    respawn   /usr/sbin/ntpd -n -d
 #   motd    once      /bin/sh /etc/bishos/first-boot.sh

@@ -72,7 +72,8 @@ rootfs:
 		         /work/$(ROOTFS_DIR)/dev /work/$(ROOTFS_DIR)/root \
 		         /work/$(ROOTFS_DIR)/home/bishal /work/$(ROOTFS_DIR)/tmp \
 		         /work/$(ROOTFS_DIR)/etc /work/$(ROOTFS_DIR)/usr/share/udhcpc \
-		         /work/$(ROOTFS_DIR)/etc/ssl/certs /work/$(ROOTFS_DIR)/var/log && \
+		         /work/$(ROOTFS_DIR)/etc/ssl/certs /work/$(ROOTFS_DIR)/var/log \
+		         /work/$(ROOTFS_DIR)/var/empty && \
 		gcc -static -O2 -DBISHOS_VERSION=$(VERSION) /work/src/init.c -o /work/$(ROOTFS_DIR)/init && \
 		cp /bin/busybox.static /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod +x /work/$(ROOTFS_DIR)/bin/busybox && \
@@ -90,6 +91,7 @@ rootfs:
 		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/ntp-step /work/$(ROOTFS_DIR)/etc/bishos/console && \
 		chmod 600 /work/$(ROOTFS_DIR)/etc/shadow && \
 		chmod 440 /work/$(ROOTFS_DIR)/etc/sudoers.d/wheel && \
+		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/sshd && \
 		chmod 755 /work/$(ROOTFS_DIR)/init /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod 700 /work/$(ROOTFS_DIR)/root && \
 		chmod 1777 /work/$(ROOTFS_DIR)/tmp"
@@ -156,7 +158,7 @@ disk: rootfs
 				'https://dl-cdn.alpinelinux.org/alpine/$(ALPINE_RELEASE)/community' \
 				> /diskroot/etc/apk/repositories && \
 			rm -rf /diskroot/etc/ssl && \
-			/sbin/apk.static --root /diskroot --initdb add alpine-baselayout-data ca-certificates-bundle sudo > /dev/null && \
+			/sbin/apk.static --root /diskroot --initdb add alpine-baselayout-data ca-certificates-bundle sudo openssh-server > /dev/null && \
 			chown -R 0:0 /diskroot && \
 			chmod 1777 /diskroot/tmp && chmod 700 /diskroot/root && \
 			chmod 4755 /diskroot/usr/bin/sudo && \
@@ -199,6 +201,11 @@ iso: all
 	docker run --rm --platform $(DOCKER_PLATFORM) -v "$$PWD":/src bishos-iso:$(ARCH) \
 		sh -c "cd /src/$(BUILD_DIR) && grub-mkrescue -o bishos-$(ARCH)_v$(VERSION).iso iso/"
 
+# Host port forwarded to the guest's sshd. QEMU's user-mode networking gives
+# the guest outbound access but no inbound route, so without this the machine
+# runs sshd that nothing can reach:  ssh -p $(SSH_PORT) bishal@localhost
+SSH_PORT = 2222
+
 # 6. Boot BishOS in QEMU: initramfs finds the virtio disk and switch_roots
 # into it, so anything written to / survives a reboot.
 run: all disk
@@ -207,7 +214,7 @@ run: all disk
 		-initrd $(INITRAMFS) \
 		-append "console=$(CONSOLE) quiet panic=1" \
 		-drive file=$(DISK),if=virtio,format=raw \
-		-nic user,model=$(NIC_MODEL) \
+		-nic user,model=$(NIC_MODEL),hostfwd=tcp::$(SSH_PORT)-:22 \
 		-nographic \
 		-m $(MEMORY)
 

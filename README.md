@@ -93,7 +93,14 @@ Builds for **two architectures** from the same source:
    BishOS disk attached) drops straight into a root shell instead, because
    nothing written to `/etc` there would survive to be asked for again.
 
-4. **Exit QEMU**:
+4. **SSH in** from another terminal on the host:
+   ```bash
+   ssh -p 2222 bishal@localhost
+   ```
+   `make run` forwards that port into the guest. Root is refused over SSH by
+   design -- log in as `bishal` and use `sudo`.
+
+5. **Exit QEMU**:
    Press `Ctrl + A`, release, then press `X`.
 
    The disk at `build/$ARCH/bishos-disk.img` persists across boots and is
@@ -226,6 +233,18 @@ of whatever machine it is booted on.
   - [x] A RAM-only boot deliberately keeps the old root shell: `/etc` there
         is rebuilt from the initramfs every boot, so a password set on the
         ISO could never be asked for again
+- [x] **Phase 10: Remote Access**
+  - [x] `sshd` supervised from the service table, on a machine that already
+        had the two things it needs: ptys, and passwords to check
+  - [x] Host keys generated on the machine at first start, never shipped in
+        the image -- a host key in an ISO is the same private key on every
+        install, which is the one thing host keys exist to prevent
+  - [x] `PermitRootLogin no`, via a `/etc/ssh/sshd_config.d` drop-in that
+        survives reinstalling the package. `root` is the account name every
+        scanner tries first, and `bishal` plus `sudo` is a better road in
+  - [x] `make run` forwards host port 2222 to the guest, because QEMU's
+        user-mode networking otherwise gives the guest no inbound route:
+        `ssh -p 2222 bishal@localhost`
   - [x] Installs dynamically-linked software: the first package pulls in
         `musl`, which provides the loader the whole repository needs
 - [x] **Phase 7: Persistent Root Filesystem**
