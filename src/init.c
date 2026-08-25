@@ -164,16 +164,64 @@ static int find_bishos_root(char *out, size_t outsz) {
     return 0;
 }
 
+// How long to wait for a persistent root to appear, in seconds.
+//
+// Five seconds was the old figure, chosen against QEMU where a virtio disk is
+// there almost immediately. On a real PC booting from a USB stick it is
+// nowhere near enough: one measured machine did not enumerate the stick until
+// 23 seconds in, because another device on the bus was failing with
+// "device descriptor read/8, error -110" and its retries stalled the whole
+// scan. init had long since given up and fallen back to RAM, so the machine
+// booted with no persistence and nothing to say why -- the disk was fine, it
+// simply was not being looked for any more.
+//
+// The wait costs nothing when a root is present, since the search stops the
+// moment it finds one. It is only paid in full when there is genuinely no
+// BishOS disk, and bishos.rootwait=N on the kernel command line shortens or
+// lengthens it -- 0 restores the old give-up-immediately behaviour.
+#define ROOT_WAIT_DEFAULT 45
+
+static int root_wait_seconds(void) {
+    char line[1024];
+    const char *key = "bishos.rootwait=";
+    int secs = ROOT_WAIT_DEFAULT;
+    FILE *f = fopen("/proc/cmdline", "r");
+
+    if (f) {
+        if (fgets(line, sizeof line, f)) {
+            char *p = strstr(line, key);
+
+            if (p) {
+                int v = atoi(p + strlen(key));
+
+                if (v >= 0 && v <= 600) {
+                    secs = v;
+                }
+            }
+        }
+        fclose(f);
+    }
+    return secs;
+}
+
 static void try_switch_root(void) {
     char devbuf[80];
     const char *dev = NULL;
 
-    // Block devices register a moment after PID 1 starts; wait briefly. USB
-    // storage is the slow case -- enumeration can take a couple of seconds.
-    for (int i = 0; i < 50 && !dev; i++) {
+    // Block devices register some time after PID 1 starts, and USB storage
+    // can take a great deal longer than feels reasonable -- see
+    // ROOT_WAIT_DEFAULT. Say so while waiting, or a slow bus is
+    // indistinguishable from a hang.
+    int wait_secs = root_wait_seconds();
+
+    for (int i = 0; i < wait_secs * 10 && !dev; i++) {
         if (find_bishos_root(devbuf, sizeof devbuf)) {
             dev = devbuf;
             break;
+        }
+        if (i > 0 && i % 50 == 0) {
+            printf("[BishOS] looking for a persistent root... %ds of %ds\n",
+                   i / 10, wait_secs);
         }
         usleep(100000); // 100ms
     }
