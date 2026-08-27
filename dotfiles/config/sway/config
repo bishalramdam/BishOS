@@ -41,8 +41,16 @@ set $menu fuzzel
 
 ### Output configuration
 #
-# Default wallpaper (more resolutions are available in /usr/share/backgrounds/sway/)
-output * bg /usr/share/backgrounds/sway/Sway_Wallpaper_Blue_1920x1080.png fill
+# The wallpaper is matrix-wallpaper (tools/matrix-wallpaper in this repo),
+# which draws on the background layer itself. This line stays as black rather
+# than an image so that if it ever fails to start the desktop looks deliberate
+# instead of showing a stock photo through the gap.
+output * bg #000000 solid_color
+
+# Matrix rain, drawn by the GPU on the background layer. exec_always so it
+# comes back on a config reload; without it a reload leaves the old process
+# running and a second one starts on top.
+exec_always pkill -x matrix-wallpaper; matrix-wallpaper --fps 30
 #
 # Example configuration:
 #
