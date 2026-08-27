@@ -61,8 +61,12 @@ tmpfscache once    /etc/bishos/tmpfs-cache
 # running as root. -g is not optional: without it the socket is owned by
 # root:root and members of the seat group still cannot open it.
 #
-#   sshd/sway note: install first --  apk add seatd sway foot
-# seatd     respawn  /usr/bin/seatd -g seat
+# Leave this enabled. It was commented out while sway was still being tried
+# out, and copying that version of this file onto a working desktop stops the
+# desktop booting: no seatd means no /run/seatd.sock, libseat has nothing to
+# fall back to, wlroots cannot open /dev/dri/card0, and sway exits at startup.
+# It needs the seatd package (apk add seatd sway foot).
+seatd     respawn  /usr/bin/seatd -g seat
 
 # Examples, once the packages are installed:
 #
