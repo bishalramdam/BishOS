@@ -412,6 +412,19 @@ before falling back to RAM, printing its progress as it goes.
   - [x] Boot menu entries for diagnosing it on a machine you cannot iterate
         on: `nomodeset` to rule graphics in or out, and `quiet` dropped so the
         boot narrates itself
+- [x] **Phase 13: A Desktop, and a Machine That Builds Itself**
+  - [x] Sway on Wayland with a browser, sound and fonts -- which needed four
+        things a distribution normally arranges before you ever log in: device
+        permissions for `/dev/dri` and `/dev/input`, a `udev` daemon, a seat
+        manager, and `XDG_RUNTIME_DIR`
+  - [x] First boot puts the new account in `seat`, `video`, `render`, `input`
+        and `audio`. The username is chosen at first boot, so it cannot be
+        written into `/etc/group` in advance
+  - [x] `~/.cache` on tmpfs, so a browser stops writing constantly to flash
+  - [x] **Self-hosting.** BishOS compiles its own kernel. A full build is
+        about two hours on a 2014 i5 with the source on a USB stick; changing
+        one option afterwards is under four minutes, which is the difference
+        between kernel work being practical and being avoided
 
 ## 📂 Project Layout
 
@@ -430,7 +443,10 @@ before falling back to RAM, printing its progress as it goes.
 │   │   ├── net-up      # Applies the network settings below
 │   │   ├── network     # Interface, mode, addresses, DNS policy
 │   │   ├── ntp-step    # Writes the corrected clock back to the RTC
-│   │   └── sshd        # Waits for ssh.enabled, makes host keys, runs sshd
+│   │   ├── sshd        # Waits for ssh.enabled, makes host keys, runs sshd
+│   │   ├── devperms    # Device groups: there is no udev to set them
+│   │   ├── udev        # Starts eudev, then tells it to look at the hardware
+│   │   └── tmpfs-cache # Puts ~/.cache in RAM instead of on flash
 │   ├── passwd          # root and sshd only -- your account is made on first boot
 │   ├── shadow          # Ships LOCKED -- "!", never a hash. Set on first boot
 │   ├── group           # Group definitions, including wheel
@@ -465,6 +481,8 @@ before falling back to RAM, printing its progress as it goes.
 │   └── arm64/
 │       └── bishos-arm64_v1.0.0.iso
 ├── TODO.md             # What is done, what is declined and why, what is left
+├── CLAUDE.md           # Instructions for Claude Code, and the traps this
+│                       # project has already fallen into
 ├── LICENSE             # MIT
 └── README.md
 ```
@@ -596,6 +614,72 @@ consolefont  once  /usr/sbin/setfont /usr/local/share/consolefonts/ter-132b-cent
 `once` runs it at boot and does not restart it. The kernel's own
 `fbcon=font:TER16x32` still draws everything before userspace exists, so
 early boot messages keep the built-in font whatever this says.
+
+### Running a desktop
+
+Sway works, with a browser, sound and fonts. What it needs is not obvious,
+because a distribution normally arranges all of it before you ever log in.
+
+```bash
+sudo apk add sway seatd foot mesa mesa-dri-gallium eudev \
+             wmenu swaybg i3status wl-clipboard grim slurp \
+             font-dejavu font-noto chromium \
+             pipewire pipewire-pulse wireplumber alsa-utils
+```
+
+Then uncomment the seat manager in `/etc/bishos/services` and reboot, because
+init reads that file once at boot:
+
+```
+seatd  respawn  /usr/bin/seatd -g seat
+```
+
+Four things had to be solved that no package installs for you:
+
+**Device permissions.** `devtmpfs` creates device nodes as `root:root 600`, so
+`/dev/dri` and `/dev/input` belong to root alone and a compositor cannot open
+the GPU. `devperms` sets the groups.
+
+**udev.** libinput does not read `/dev/input` -- it asks udev which devices
+are keyboards and mice. With no udev database it finds nothing whatever the
+permissions say, and reports "no input devices" as though the hardware were
+absent. `eudev` is started and then told to look at hardware that appeared
+before it did, which is all of it.
+
+**A seat manager.** `seatd` lets a compositor use the screen and input devices
+without running as root. Without `-g seat` its socket is owned by `root:root`
+and members of the group still cannot open it.
+
+**`XDG_RUNTIME_DIR`.** Wayland keeps its sockets in a private per-user
+directory and refuses to start without one. `/etc/profile` creates it.
+
+Chromium needs `--ozone-platform=wayland`, so it talks to the compositor
+rather than looking for X11, and `CONFIG_USER_NS=y` in the kernel or its
+sandbox cannot start. Brave is not an option: it is not packaged for Alpine,
+the prebuilt binaries are glibc-linked, and building it needs around 100 GB.
+
+### Building BishOS on BishOS
+
+The machine compiles its own kernel, which turns a change from a
+cross-machine chore into a four-minute loop.
+
+```bash
+sudo apk add gcc make flex bison perl bc \
+             openssl-dev elfutils-dev ncurses-dev linux-headers musl-dev
+```
+
+`linux-headers` is the one that surprises people. musl does not ship
+`/usr/include/asm` -- those headers belong to the kernel rather than the C
+library -- so building a kernel needs headers from a kernel.
+
+```bash
+make -j4 bzImage      # the image
+make -j4 modules      # anything set to =m
+sudo make modules_install
+```
+
+`make bzImage` alone does not build modules, and `modules_install` then stops
+with `No rule to make target 'modules.order'`.
 
 ### When a program that is definitely there reports "not found"
 
