@@ -460,6 +460,8 @@ before falling back to RAM, printing its progress as it goes.
 │   ├── resolv.conf     # Fallback nameservers; DHCP overwrites this per lease
 │   └── udhcpc/
 │       └── default.script # DHCP event handler: address, route, nameservers
+├── dotfiles/           # Desktop config: sway, launcher, switcher, shell.
+│   └── install.sh      # Symlinks them into place; the files stay here
 ├── tools/
 │   └── centre-tilde.py # Moves a console font's ~ down into the letter body
 ├── src/

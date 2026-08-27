@@ -1,0 +1,7 @@
+# Sound goes out over HDMI to the monitor, which passes it to the speakers.
+# Card 0 device 3 is the one that works -- the monitor reports eld_valid 0,
+# meaning it claims to have no audio, but it plays anyway. Without this,
+# anything using ALSA directly picks card 0 device 0 and is silent.
+defaults.pcm.card 0
+defaults.pcm.device 3
+defaults.ctl.card 0

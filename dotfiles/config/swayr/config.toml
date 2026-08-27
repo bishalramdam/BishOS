@@ -1,0 +1,27 @@
+# swayr -- window switcher with memory.
+#
+# swayrd runs in the background and records the order you used windows in.
+# sway has no such memory of its own: its Super+Tab walks the window tree by
+# position, which is why it never behaved like Cmd+Tab. swayrd is what makes
+# "the window I was just in" mean something.
+
+[menu]
+# fuzzel is already here for the launcher, so this adds no new program.
+# --dmenu makes it read the list on stdin and print back whatever is chosen.
+executable = "fuzzel"
+args = ["--dmenu", "--prompt={prompt}: ", "--width=70", "--lines=12"]
+
+[format]
+# Plain text. The defaults use pango markup (<b>, <span>) which wofi renders
+# and fuzzel does not -- in fuzzel those tags would be shown literally.
+output_format = "Output {name}"
+workspace_format = "Workspace {name}"
+container_format = "Container"
+window_format = "{app_name}  —  {title}"
+indent = ""
+urgency_start = ""
+urgency_end = ""
+html_escape = false
+
+[layout]
+auto_tile = false

@@ -1,0 +1,27 @@
+
+#  ~/.bashrc -- interactive shells only.
+case $- in *i*) ;; *) return ;; esac
+HISTSIZE=10000
+HISTFILESIZE=20000
+shopt -s histappend
+shopt -s checkwinsize
+
+if [ "$(id -u)" = 0 ]; then
+    PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]# '
+else
+    PS1='\[\e[1;36m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]$ '
+fi
+
+export EDITOR=vi
+export PAGER=less
+export LESS='-R -F -X'
+
+alias ll='ls -la --color=auto'
+alias la='ls -A --color=auto'
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+alias df='df -h'
+alias free='free -m'
+alias ..='cd ..'
+alias logs='sudo tail -30 /var/log/messages'
+
