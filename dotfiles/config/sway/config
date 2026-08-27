@@ -50,7 +50,13 @@ output * bg #000000 solid_color
 # Matrix rain, drawn by the GPU on the background layer. exec_always so it
 # comes back on a config reload; without it a reload leaves the old process
 # running and a second one starts on top.
-exec_always pkill -x matrix-rain; matrix-rain --cell 12 --density 1.5 --fps 30
+#
+# The quotes are load-bearing. sway splits a config line on ";" into separate
+# sway commands before any shell sees it, so unquoted this ran "exec_always
+# pkill -x matrix-rain" and then tried "matrix-rain" as a sway command, which
+# fails with "Unknown/invalid command" and no wallpaper. Quoted, the whole
+# thing reaches sh as one command.
+exec_always "pkill -x matrix-rain; matrix-rain --cell 12 --density 1.5 --fps 30"
 #
 # Example configuration:
 #
