@@ -1,0 +1,53 @@
+[Desktop Entry]
+Version=1.0
+Name=Chromium
+GenericName=Web Browser
+Comment=Browse the web
+Exec=/usr/bin/chromium-browser --ozone-platform=wayland --password-store=basic --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL %U
+Terminal=false
+Icon=chromium
+Type=Application
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+Actions=new-window;incognito;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=/usr/bin/chromium-browser --ozone-platform=wayland --password-store=basic --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL
+
+[Desktop Action incognito]
+Name=New Incognito Window
+Exec=/usr/bin/chromium-browser --ozone-platform=wayland --password-store=basic --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL --incognito
+
+# Three flags, each for a reason BishOS creates.
+#
+# --password-store=basic
+#   Chromium keeps the key that encrypts its cookies in the system keyring,
+#   reached over D-Bus. There is no D-Bus here, so the key is never stored --
+#   and on the next start the cookies cannot be decrypted, are discarded, and
+#   every login is gone. History is not encrypted, which is exactly why that
+#   survives while the sign-in does not.
+#   "basic" uses a fixed key instead, so cookies persist. They are then
+#   readable by anyone holding the file, which on an unencrypted USB stick was
+#   already true of everything else.
+#
+# --ozone-platform=wayland
+#   Otherwise Chromium runs with --ozone-platform-hint=auto and guesses. It
+#   has been guessing right; that is not the same as being told.
+#
+# --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL
+#   Hardware video decoding through i965_drv_video.so, the VA-API driver for
+#   Haswell. chrome://gpu confirms it took: "Video Decode: Hardware
+#   accelerated".
+#
+#   It buys less than it sounds like. vainfo lists what this GPU can decode --
+#   MPEG-2, H.264, VC-1, JPEG -- and that is all. No VP9, no AV1; the silicon
+#   is from 2014 and both codecs came after it. YouTube serves VP9 or AV1, so
+#   it never reaches the decoder and one core sits near 60% through a 1080p
+#   video. That is software VP9 working correctly, not a broken flag, and no
+#   configuration fixes it -- only the h264ify extension, which asks YouTube
+#   for H.264 instead.
+#
+#   What the flag does help: local files (mostly H.264, so mpv --hwdec=vaapi
+#   decodes on the GPU) and the many sites still serving H.264.

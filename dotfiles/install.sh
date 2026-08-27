@@ -32,6 +32,7 @@ link config/wob/wob.ini       .config/wob/wob.ini
 link config/foot/foot.ini       .config/foot/foot.ini
 link config/nwg-dock/style.css  .config/nwg-dock/style.css
 link config/gtk-3.0/settings.ini .config/gtk-3.0/settings.ini
+link local/applications/chromium.desktop .local/share/applications/chromium.desktop
 link home/bashrc              .bashrc
 link home/bash_profile        .bash_profile
 link home/asoundrc            .asoundrc
