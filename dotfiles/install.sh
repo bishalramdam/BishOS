@@ -30,6 +30,7 @@ link config/fuzzel/fuzzel.ini .config/fuzzel/fuzzel.ini
 link config/swayr/config.toml .config/swayr/config.toml
 link config/wob/wob.ini       .config/wob/wob.ini
 link config/foot/foot.ini       .config/foot/foot.ini
+link config/nwg-dock/style.css  .config/nwg-dock/style.css
 link config/gtk-3.0/settings.ini .config/gtk-3.0/settings.ini
 link home/bashrc              .bashrc
 link home/bash_profile        .bash_profile

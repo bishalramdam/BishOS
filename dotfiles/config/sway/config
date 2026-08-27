@@ -392,3 +392,18 @@ bindsym $mod+Ctrl+q exec swaylock -f -c 1c1c1c
 # written all along.
 bindsym Print exec f=~/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png && grim "$f" && notify-send -t 2000 "Screenshot" "$(basename $f)"
 bindsym Shift+Print exec f=~/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png && grim -g "$(slurp)" "$f" && notify-send -t 2000 "Screenshot" "$(basename $f)"
+
+# ============================================================
+#  Dock
+# ============================================================
+#
+# exec starts it detached, in the background -- no terminal window, and
+# closing a terminal cannot kill it.
+#
+#   -d      auto-hide: appears when the pointer reaches the bottom edge
+#   -hd 0   no hotspot delay. The default 20ms means the pointer has to arrive
+#           quickly enough to count, which feels like the dock ignoring you
+#   -nows   no workspace switcher. It defaults to eight workspaces whether or
+#           not they exist, so clicking one takes you to an empty screen
+#   -i 48   icon size
+exec nwg-dock -d -hd 0 -nows -i 48 -p bottom

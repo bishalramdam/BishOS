@@ -1,0 +1,50 @@
+/* nwg-dock -- macOS-ish.
+ *
+ * The default stylesheet puts the background and the rounding on `window`.
+ * That does not work: a layer-shell surface is a rectangle, and painting it
+ * opaque means the corners stay square no matter what border-radius says --
+ * you get a black box with rounded corners drawn inside it, which looks worst
+ * against a light background.
+ *
+ * So: the window is fully transparent, and #box carries the background, the
+ * rounding and a margin. The margin matters -- without it the rounded corners
+ * touch the screen edge and there is nothing to see them against.
+ */
+
+window {
+    background: transparent;
+}
+
+#box {
+    background: rgba(28, 28, 30, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 18px;
+    padding: 8px 10px;
+    margin: 10px;
+}
+
+button, image {
+    background: none;
+    border-style: none;
+    box-shadow: none;
+    color: #e8e8e8;
+}
+
+button {
+    padding: 6px;
+    margin-left: 3px;
+    margin-right: 3px;
+    border-radius: 12px;
+    color: #e8e8e8;
+    font-size: 12px;
+}
+
+button:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+}
+
+button:focus {
+    box-shadow: none;
+    background-color: rgba(255, 255, 255, 0.10);
+}
