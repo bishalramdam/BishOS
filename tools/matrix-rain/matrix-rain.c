@@ -13,11 +13,11 @@
  * which is why this costs a few percent of an integrated GPU and nothing
  * measurable on the CPU.
  *
- *     matrix-wallpaper                  # 30 fps, 16-pixel cells
- *     matrix-wallpaper --fps 60
- *     matrix-wallpaper --cell 12        # smaller glyphs, more columns
- *     matrix-wallpaper --density 0.5    # fewer columns raining
- *     matrix-wallpaper --speed 1.8      # faster fall
+ *     matrix-rain                  # 30 fps, 16-pixel cells
+ *     matrix-rain --fps 60
+ *     matrix-rain --cell 12        # smaller glyphs, more columns
+ *     matrix-rain --density 0.5    # fewer columns raining
+ *     matrix-rain --speed 1.8      # faster fall
  */
 #define _POSIX_C_SOURCE 200809L
 
@@ -66,7 +66,7 @@ static EGLContext egl_context = EGL_NO_CONTEXT;
 static EGLConfig egl_config;
 
 static GLuint program, atlas, vbo;
-static GLint u_res, u_time, u_cell, u_glyphs, u_speed, u_density, u_atlas;
+static GLint u_res, u_time, u_cell, u_glyphs, u_speed, u_spawn, u_drops, u_atlas;
 static bool gl_ready;
 
 static double start_time;
@@ -74,6 +74,8 @@ static double frame_interval = 1.0 / 30.0;
 static float opt_cell = 16.0f;
 static float opt_speed = 1.0f;
 static float opt_density = 0.85f;
+/* Matches the loop bound in the shader, which cannot be a uniform. */
+#define MAX_DROPS 4.0f
 static volatile sig_atomic_t running = 1;
 
 static double now_sec(void)
@@ -102,7 +104,8 @@ static const char *FRAG =
     "uniform vec2 uCell;\n"
     "uniform float uGlyphs;\n"
     "uniform float uSpeed;\n"
-    "uniform float uDensity;\n"
+    "uniform float uSpawn;\n"
+    "uniform float uDrops;\n"
     "uniform sampler2D uAtlas;\n"
     "\n"
     "float hash11(float n) { return fract(sin(n * 127.1) * 43758.5453123); }\n"
@@ -119,19 +122,34 @@ static const char *FRAG =
     "\n"
     /* Everything about a column is derived from its index, so no state is kept. */
     "    float col = cell.x;\n"
-    "    float on = step(hash11(col * 1.37 + 5.0), uDensity);\n"
-    "    float speed = (0.35 + 0.85 * hash11(col * 2.71)) * uSpeed;\n"
-    "    float trail = 6.0 + 22.0 * hash11(col * 4.13);\n"
+    "    float bright = 0.0;\n"
+    "    float headness = 0.0;\n"
     "\n"
-    /* One cycle carries the head from above the screen to past the bottom. */
-    "    float cycle = rows + trail + 8.0;\n"
-    "    float head = mod(uTime * speed * 9.0 + hash11(col * 7.77) * cycle, cycle)\n"
-    "               - trail;\n"
-    "\n"
-    /* Distance behind the head, in rows: 0 is the head, trail is the tail end. */
-    "    float dist = head - cell.y;\n"
-    "    float lit = step(0.0, dist) * step(dist, trail);\n"
-    "    float bright = lit * pow(1.0 - dist / trail, 1.7) * on;\n"
+    /* Past a full screen of columns the only way to get denser is more than
+     * one drop falling in the same column at once, so density above 1.0 adds
+     * drops. The loop bound has to be a constant -- GLSL ES 1.00 requires it
+     * -- so unused drops are masked to zero rather than broken out of. */
+    "    for (int i = 0; i < 4; i++) {\n"
+    "        float fi = float(i);\n"
+    "        float use = step(fi + 0.5, uDrops);\n"
+    "        float seed = col * 2.71 + fi * 37.13;\n"
+    "        float on = step(hash11(seed * 3.31 + 5.0), uSpawn);\n"
+    "        float speed = (0.35 + 0.85 * hash11(seed)) * uSpeed;\n"
+    "        float trail = 6.0 + 22.0 * hash11(seed * 1.77);\n"
+    /* One cycle carries a head from above the screen to past the bottom. */
+    "        float cycle = rows + trail + 8.0;\n"
+    "        float head = mod(uTime * speed * 9.0 + hash11(seed * 7.77) * cycle,\n"
+    "                         cycle) - trail;\n"
+    /* Distance behind the head in rows: 0 is the head, trail is the tail. */
+    "        float dist = head - cell.y;\n"
+    "        float lit = step(0.0, dist) * step(dist, trail);\n"
+    "        float b = lit * pow(1.0 - dist / trail, 1.7) * on * use;\n"
+    /* Where drops overlap the brightest wins, and the colour follows it. */
+    "        if (b > bright) {\n"
+    "            bright = b;\n"
+    "            headness = smoothstep(2.2, 0.0, dist);\n"
+    "        }\n"
+    "    }\n"
     "\n"
     /* Glyphs churn at a rate of their own so the trails shimmer unevenly. */
     "    float rate = 1.5 + 6.0 * hash11(col * 3.31 + cell.y * 0.017);\n"
@@ -142,7 +160,6 @@ static const char *FRAG =
     "    float ink = texture2D(uAtlas, vec2((gi + f.x) / uGlyphs, f.y)).r;\n"
     "\n"
     /* The leading cell is near-white; the trail settles into green. */
-    "    float headness = smoothstep(2.2, 0.0, dist);\n"
     "    vec3 trailCol = vec3(0.07, 0.85, 0.22);\n"
     "    vec3 headCol = vec3(0.80, 1.00, 0.85);\n"
     "    float flicker = 0.85 + 0.15 * hash21(cell + vec2(step_t, 0.0));\n"
@@ -161,7 +178,7 @@ static GLuint compile(GLenum type, const char *src)
     if (!ok) {
         char log[2048];
         glGetShaderInfoLog(s, sizeof log, NULL, log);
-        fprintf(stderr, "matrix-wallpaper: shader failed to compile:\n%s\n", log);
+        fprintf(stderr, "matrix-rain: shader failed to compile:\n%s\n", log);
         exit(1);
     }
     return s;
@@ -174,7 +191,7 @@ static void build_atlas(void)
     int w = GLYPH_COUNT * GLYPH_W;
     unsigned char *px = calloc((size_t)w * GLYPH_H, 1);
     if (!px) {
-        fprintf(stderr, "matrix-wallpaper: out of memory building the atlas\n");
+        fprintf(stderr, "matrix-rain: out of memory building the atlas\n");
         exit(1);
     }
     for (int g = 0; g < GLYPH_COUNT; g++)
@@ -210,7 +227,7 @@ static void gl_init(void)
     if (!ok) {
         char log[2048];
         glGetProgramInfoLog(program, sizeof log, NULL, log);
-        fprintf(stderr, "matrix-wallpaper: shader failed to link:\n%s\n", log);
+        fprintf(stderr, "matrix-rain: shader failed to link:\n%s\n", log);
         exit(1);
     }
     glDeleteShader(vs);
@@ -221,7 +238,8 @@ static void gl_init(void)
     u_cell = glGetUniformLocation(program, "uCell");
     u_glyphs = glGetUniformLocation(program, "uGlyphs");
     u_speed = glGetUniformLocation(program, "uSpeed");
-    u_density = glGetUniformLocation(program, "uDensity");
+    u_spawn = glGetUniformLocation(program, "uSpawn");
+    u_drops = glGetUniformLocation(program, "uDrops");
     u_atlas = glGetUniformLocation(program, "uAtlas");
 
     /* Two triangles covering clip space. The shader does the rest. */
@@ -244,7 +262,7 @@ static const struct wl_callback_listener frame_listener;
 static void draw(struct output *o)
 {
     if (!eglMakeCurrent(egl_display, o->egl_surface, o->egl_surface, egl_context)) {
-        fprintf(stderr, "matrix-wallpaper: eglMakeCurrent failed\n");
+        fprintf(stderr, "matrix-rain: eglMakeCurrent failed\n");
         running = 0;
         return;
     }
@@ -261,7 +279,13 @@ static void draw(struct output *o)
     glUniform2f(u_cell, opt_cell, opt_cell);
     glUniform1f(u_glyphs, (float)GLYPH_COUNT);
     glUniform1f(u_speed, opt_speed);
-    glUniform1f(u_density, opt_density);
+    /* density 1.5 becomes two drops per column, each 75% likely to be
+     * running -- the same split matrix_rain.py uses. */
+    float drops = ceilf(opt_density);
+    if (drops < 1.0f)
+        drops = 1.0f;
+    glUniform1f(u_drops, drops);
+    glUniform1f(u_spawn, opt_density / drops);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, atlas);
     glUniform1i(u_atlas, 0);
@@ -307,7 +331,7 @@ static void layer_configure(void *data, struct zwlr_layer_surface_v1 *ls,
                                                 (EGLNativeWindowType)o->egl_window,
                                                 NULL);
         if (o->egl_surface == EGL_NO_SURFACE) {
-            fprintf(stderr, "matrix-wallpaper: could not create an EGL surface\n");
+            fprintf(stderr, "matrix-rain: could not create an EGL surface\n");
             running = 0;
             return;
         }
@@ -335,7 +359,7 @@ static void output_init(struct output *o)
     o->surface = wl_compositor_create_surface(compositor);
     o->layer = zwlr_layer_shell_v1_get_layer_surface(
         layer_shell, o->surface, o->wl,
-        ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, "matrix-wallpaper");
+        ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, "matrix-rain");
 
     zwlr_layer_surface_v1_set_anchor(o->layer,
                                      ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
@@ -424,12 +448,13 @@ static const struct wl_registry_listener reg_listener = {
 
 static void usage(void)
 {
-    puts("matrix-wallpaper -- Matrix digital rain on the Wayland background layer\n"
+    puts("matrix-rain -- Matrix digital rain on the Wayland background layer\n"
          "\n"
          "  --fps N        frames per second (default 30)\n"
          "  --cell N       glyph cell size in pixels (default 16)\n"
          "  --speed N      fall speed multiplier (default 1.0)\n"
-         "  --density N    share of columns raining, 0..1 (default 0.85)\n"
+         "  --density N    up to 1.0 = share of columns raining; above that,\n"
+         "                 simultaneous drops per column, max 4 (default 0.85)\n"
          "  --help");
 }
 
@@ -458,19 +483,19 @@ int main(int argc, char **argv)
     if (fps < 1.0) fps = 1.0;
     if (opt_cell < 4.0f) opt_cell = 4.0f;
     if (opt_density < 0.0f) opt_density = 0.0f;
-    if (opt_density > 1.0f) opt_density = 1.0f;
+    if (opt_density > MAX_DROPS) opt_density = MAX_DROPS;
     frame_interval = 1.0 / fps;
 
     /* The glyph table is hand-edited text, so check its shape rather than
      * trusting it and reading past the end of a row. */
     if (GLYPH_ROW_COUNT % GLYPH_H != 0) {
-        fprintf(stderr, "matrix-wallpaper: glyph table is not a multiple of %d rows\n",
+        fprintf(stderr, "matrix-rain: glyph table is not a multiple of %d rows\n",
                 GLYPH_H);
         return 1;
     }
     for (int i = 0; i < GLYPH_ROW_COUNT; i++)
         if ((int)strlen(GLYPH_ROWS[i]) != GLYPH_W) {
-            fprintf(stderr, "matrix-wallpaper: glyph row %d is %d wide, expected %d\n",
+            fprintf(stderr, "matrix-rain: glyph row %d is %d wide, expected %d\n",
                     i, (int)strlen(GLYPH_ROWS[i]), GLYPH_W);
             return 1;
         }
@@ -480,7 +505,7 @@ int main(int argc, char **argv)
 
     display = wl_display_connect(NULL);
     if (!display) {
-        fprintf(stderr, "matrix-wallpaper: no Wayland display "
+        fprintf(stderr, "matrix-rain: no Wayland display "
                         "(is WAYLAND_DISPLAY set?)\n");
         return 1;
     }
@@ -490,18 +515,18 @@ int main(int argc, char **argv)
     wl_display_roundtrip(display);
 
     if (!compositor || !layer_shell) {
-        fprintf(stderr, "matrix-wallpaper: the compositor does not offer "
+        fprintf(stderr, "matrix-rain: the compositor does not offer "
                         "wlr-layer-shell, so there is no background to draw on\n");
         return 1;
     }
     if (!outputs) {
-        fprintf(stderr, "matrix-wallpaper: no outputs\n");
+        fprintf(stderr, "matrix-rain: no outputs\n");
         return 1;
     }
 
     egl_display = eglGetDisplay((EGLNativeDisplayType)display);
     if (egl_display == EGL_NO_DISPLAY || !eglInitialize(egl_display, NULL, NULL)) {
-        fprintf(stderr, "matrix-wallpaper: could not initialise EGL\n");
+        fprintf(stderr, "matrix-rain: could not initialise EGL\n");
         return 1;
     }
     eglBindAPI(EGL_OPENGL_ES_API);
@@ -514,13 +539,13 @@ int main(int argc, char **argv)
     };
     EGLint n = 0;
     if (!eglChooseConfig(egl_display, cfg_attrs, &egl_config, 1, &n) || n == 0) {
-        fprintf(stderr, "matrix-wallpaper: no suitable EGL config\n");
+        fprintf(stderr, "matrix-rain: no suitable EGL config\n");
         return 1;
     }
     static const EGLint ctx_attrs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
     egl_context = eglCreateContext(egl_display, egl_config, EGL_NO_CONTEXT, ctx_attrs);
     if (egl_context == EGL_NO_CONTEXT) {
-        fprintf(stderr, "matrix-wallpaper: could not create a GLES2 context\n");
+        fprintf(stderr, "matrix-rain: could not create a GLES2 context\n");
         return 1;
     }
 
@@ -557,7 +582,7 @@ int main(int argc, char **argv)
             wl_display_cancel_read(display);
 
         if (ret < 0 && errno != EINTR) {
-            fprintf(stderr, "matrix-wallpaper: poll: %s\n", strerror(errno));
+            fprintf(stderr, "matrix-rain: poll: %s\n", strerror(errno));
             break;
         }
         if (wl_display_dispatch_pending(display) < 0) {
@@ -569,10 +594,10 @@ int main(int argc, char **argv)
             if (err == EPROTO)
                 code = wl_display_get_protocol_error(display, &iface, &id);
             if (err == EPROTO)
-                fprintf(stderr, "matrix-wallpaper: protocol error %u on %s (object %u)\n",
+                fprintf(stderr, "matrix-rain: protocol error %u on %s (object %u)\n",
                         code, iface ? iface->name : "?", id);
             else
-                fprintf(stderr, "matrix-wallpaper: connection lost: %s\n", strerror(err));
+                fprintf(stderr, "matrix-rain: connection lost: %s\n", strerror(err));
             return 1;
         }
 

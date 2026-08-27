@@ -1,10 +1,10 @@
-# matrix-wallpaper
+# matrix-rain
 
 Matrix digital rain as a live wallpaper for sway, drawn by the GPU.
 
     make
     sudo make install
-    matrix-wallpaper
+    matrix-rain
 
 ## What it does
 
@@ -41,11 +41,18 @@ because katakana coverage is not something a minimal system has lying around.
 The sway config in `dotfiles/` already does this:
 
     output * bg #000000 solid_color
-    exec_always pkill -x matrix-wallpaper; matrix-wallpaper --fps 30
+    exec_always pkill -x matrix-rain; matrix-rain --cell 12 --density 1.5 --fps 30
 
 `exec_always` rather than `exec` so it survives a config reload, and the
 `pkill` first so a reload replaces the old process instead of stacking a
 second one on top of it.
+
+The name is short on purpose. Linux truncates a process name to 15
+characters, so `matrix-wallpaper` -- 16 -- appears in `/proc` as
+`matrix-wallpape` and `pkill -x matrix-wallpaper` silently matches nothing.
+`pkill -f` would match instead, but it would also match the shell sway runs
+the line in, killing the parent before the wallpaper ever starts. A name that
+fits avoids the whole problem.
 
 The background colour stays black rather than an image: if the wallpaper ever
 fails to start, a black desktop looks deliberate.

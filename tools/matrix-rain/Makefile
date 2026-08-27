@@ -19,10 +19,10 @@ GEN := wlr-layer-shell-unstable-v1-client-protocol.h \
        xdg-shell-client-protocol.h \
        xdg-shell-protocol.c
 
-all: matrix-wallpaper
+all: matrix-rain
 
-matrix-wallpaper: matrix-wallpaper.c glyphs.h $(GEN)
-	$(CC) $(CFLAGS) -o $@ matrix-wallpaper.c \
+matrix-rain: matrix-rain.c glyphs.h $(GEN)
+	$(CC) $(CFLAGS) -o $@ matrix-rain.c \
 	    wlr-layer-shell-unstable-v1-protocol.c xdg-shell-protocol.c $(LDLIBS)
 
 wlr-layer-shell-unstable-v1-client-protocol.h: $(LAYER_SHELL_XML)
@@ -37,13 +37,13 @@ xdg-shell-client-protocol.h: $(XDG_SHELL_XML)
 xdg-shell-protocol.c: $(XDG_SHELL_XML)
 	wayland-scanner private-code $< $@
 
-install: matrix-wallpaper
-	install -Dm755 matrix-wallpaper $(DESTDIR)$(PREFIX)/bin/matrix-wallpaper
+install: matrix-rain
+	install -Dm755 matrix-rain $(DESTDIR)$(PREFIX)/bin/matrix-rain
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/matrix-wallpaper
+	rm -f $(DESTDIR)$(PREFIX)/bin/matrix-rain
 
 clean:
-	rm -f matrix-wallpaper $(GEN)
+	rm -f matrix-rain $(GEN)
 
 .PHONY: all install uninstall clean
