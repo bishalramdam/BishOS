@@ -51,9 +51,10 @@ sshd      respawn   /bin/sh /etc/bishos/sshd
 devperms  once     /etc/bishos/devperms
 udev      once     /etc/bishos/udev
 
-# Browser caches in RAM rather than on the disk. Nothing in ~/.cache is worth
-# keeping across a reboot, and on a USB stick the constant writes are slow and
-# wear it out.
+# The browser cache in RAM rather than on the disk: Chromium writes to it
+# constantly, and on a USB stick that is slow and wears the stick out. Only
+# Chromium -- the rest of ~/.cache is small, rarely written, and some of it
+# (the launcher's ranking, compiled shaders, the font index) is worth keeping.
 tmpfscache once    /etc/bishos/tmpfs-cache
 
 # A seat manager, so a compositor can use the screen and input devices without
