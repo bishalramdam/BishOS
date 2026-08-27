@@ -85,6 +85,12 @@ if grep -q '^root:!' /etc/shadow 2>/dev/null; then
         exec /bin/sh -l
     fi
     addgroup "$NEWUSER" wheel >/dev/null 2>&1
+    # The groups a desktop needs. Without these the account cannot open the
+    # GPU, the input devices or the sound card, and a compositor fails with
+    # permission errors that look like something else entirely.
+    for g in seat video render input audio; do
+        addgroup "$NEWUSER" "$g" >/dev/null 2>&1
+    done
 
     cat > "/home/$NEWUSER/welcome.txt" <<WELCOME
 Welcome to BishOS, $NEWUSER!

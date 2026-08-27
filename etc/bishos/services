@@ -42,6 +42,27 @@ ntpd      respawn   /sbin/ntpd -n -S /etc/bishos/ntp-step -p 0.pool.ntp.org -p 1
 # sitting on it.  Turn it on with:  sudo touch /etc/bishos/ssh.enabled
 sshd      respawn   /bin/sh /etc/bishos/sshd
 
+# Device permissions and hardware discovery. BishOS has no udev of its own:
+# devtmpfs creates device nodes as root:root 600, so nothing but root can use
+# the GPU or the input devices, and libinput asks udev which devices are
+# keyboards -- with no udev database it finds nothing whatever the permissions
+# say. devperms sets the groups; udev starts eudev and tells it to look at
+# hardware that appeared before it did.
+devperms  once     /etc/bishos/devperms
+udev      once     /etc/bishos/udev
+
+# Browser caches in RAM rather than on the disk. Nothing in ~/.cache is worth
+# keeping across a reboot, and on a USB stick the constant writes are slow and
+# wear it out.
+tmpfscache once    /etc/bishos/tmpfs-cache
+
+# A seat manager, so a compositor can use the screen and input devices without
+# running as root. -g is not optional: without it the socket is owned by
+# root:root and members of the seat group still cannot open it.
+#
+#   sshd/sway note: install first --  apk add seatd sway foot
+# seatd     respawn  /usr/bin/seatd -g seat
+
 # Examples, once the packages are installed:
 #
 #   ntpd    respawn   /usr/sbin/ntpd -n -d

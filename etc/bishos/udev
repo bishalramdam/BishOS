@@ -1,0 +1,11 @@
+#!/bin/sh
+# libinput asks udev which devices are keyboards and mice. Without a udev
+# database it finds nothing, whatever the permissions say. This starts the
+# daemon and then tells it to look at hardware that already exists -- udev
+# normally learns about devices as they appear, and everything here appeared
+# before it started.
+/sbin/udevd --daemon
+/sbin/udevadm trigger --type=subsystems --action=add
+/sbin/udevadm trigger --type=devices --action=add
+/sbin/udevadm settle --timeout=10
+exit 0

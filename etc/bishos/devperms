@@ -1,0 +1,12 @@
+#!/bin/sh
+# BishOS has no udev. devtmpfs creates device nodes as root:root 600, so
+# nothing but root can use the GPU or the input devices. A normal system
+# has udev rules for this; here it is a few lines at boot.
+addgroup -S video 2>/dev/null
+addgroup -S render 2>/dev/null
+addgroup -S input 2>/dev/null
+
+for d in /dev/dri/card*;    do [ -e "$d" ] && chgrp video "$d" && chmod 660 "$d"; done
+for d in /dev/dri/renderD*; do [ -e "$d" ] && chgrp render "$d" && chmod 660 "$d"; done
+for d in /dev/input/*;     do [ -e "$d" ] && chgrp input  "$d" && chmod 660 "$d"; done
+exit 0

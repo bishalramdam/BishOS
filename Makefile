@@ -140,6 +140,8 @@ rootfs:
 		chmod 600 /work/$(ROOTFS_DIR)/etc/shadow && \
 		chmod 440 /work/$(ROOTFS_DIR)/etc/sudoers.d/wheel && \
 		chmod 755 /work/$(ROOTFS_DIR)/etc/bishos/sshd /work/$(ROOTFS_DIR)/etc/bishos/net-up \
+		          /work/$(ROOTFS_DIR)/etc/bishos/devperms /work/$(ROOTFS_DIR)/etc/bishos/udev \
+		          /work/$(ROOTFS_DIR)/etc/bishos/tmpfs-cache \
 		          /work/$(ROOTFS_DIR)/etc/bishos/install && \
 		ln -sf /etc/bishos/install /work/$(ROOTFS_DIR)/sbin/bishos-install && \
 		chmod 755 /work/$(ROOTFS_DIR)/init /work/$(ROOTFS_DIR)/bin/busybox && \

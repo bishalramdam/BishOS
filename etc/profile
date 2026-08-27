@@ -45,3 +45,11 @@ alias cls='printf "\033c"'
 
 # Switch into HOME directory on login
 cd "$HOME" 2>/dev/null || cd /
+
+# Wayland compositors keep their sockets in a private per-user directory and
+# refuse to start without one. On a normal system a login manager creates it;
+# BishOS has none, so it is made here at login.
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+    mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+fi

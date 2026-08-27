@@ -1,0 +1,21 @@
+#!/bin/sh
+# Put the browser cache in RAM.
+#
+# Chromium writes to ~/.cache constantly. On USB flash that is slow and wears
+# the stick out, and nothing in there is worth keeping across a reboot -- it
+# is a cache. A tmpfs is memory, so the writes cost nothing and vanish on
+# shutdown, which is exactly right for this.
+#
+# The user is found rather than named: BishOS asks for a username on first
+# boot, so there is nothing to hard-code here.
+SIZE=512M
+
+awk -F: '$3 >= 1000 && $3 < 65534 { print $1 ":" $3 ":" $4 ":" $6 }' /etc/passwd |
+while IFS=: read -r name uid gid home; do
+    [ -d "$home" ] || continue
+    mkdir -p "$home/.cache"
+    chown "$uid:$gid" "$home/.cache"
+    mountpoint -q "$home/.cache" && continue
+    mount -t tmpfs -o "size=$SIZE,mode=0700,uid=$uid,gid=$gid" tmpfs "$home/.cache"
+done
+exit 0
