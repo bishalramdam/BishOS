@@ -25,3 +25,7 @@ alias free='free -m'
 alias ..='cd ..'
 alias logs='sudo tail -30 /var/log/messages'
 
+
+# yazi, the file manager. Short name because the real one is hard to recall.
+# 'fs' as in filesystem -- two letters, next to each other on the keyboard.
+alias fs='yazi'

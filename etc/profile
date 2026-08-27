@@ -1,6 +1,10 @@
 # /etc/profile: System-wide environment configuration for BishOS
 
-export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+# /usr/local is where locally built software belongs -- anything compiled on
+# the machine rather than installed by apk. Without it on PATH, everything you
+# build yourself is invisible unless typed as a full path, which is a strange
+# way to discover that your own program "does not exist".
+export PATH=/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin
 export TERM=xterm-256color
 export PAGER=less
 export EDITOR=vi

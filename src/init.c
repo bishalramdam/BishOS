@@ -803,6 +803,25 @@ int main(int argc, char **argv) {
     mkdir("/var", 0755);
     mkdir("/var/log", 0755);
 
+    // /run holds things that mean nothing after a reboot: seatd's socket, the
+    // per-user Wayland runtime directory, a named pipe for the volume
+    // overlay, sway's own IPC socket. Every program here assumes it starts
+    // empty.
+    //
+    // On a disk-backed /run it does not. One machine accumulated eleven dead
+    // sway sockets across six sessions, and anything that picks "the" socket
+    // by globbing the directory then talks to a corpse -- which fails by
+    // returning nothing rather than by erroring, so it reads as "sway has no
+    // windows" instead of "you are asking the wrong sway".
+    //
+    // A tmpfs is empty at every boot, which is what everything expects.
+    mkdir("/run", 0755);
+    if (mount("tmpfs", "/run", "tmpfs", MS_NOSUID | MS_NODEV,
+              "mode=0755,size=64M") != 0) {
+        printf("[BishOS] warning: /run is not a tmpfs (%s) -- stale sockets "
+               "will survive reboots\n", strerror(errno));
+    }
+
     // 5. Somewhere for home directories. The accounts themselves are not
     // created here: there is no user in the shipped /etc/passwd, because an
     // image carrying its author's username puts a stranger's name on somebody

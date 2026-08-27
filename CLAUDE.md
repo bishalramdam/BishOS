@@ -114,6 +114,20 @@ A desktop assumes all three. What had to be added by hand: `seatd -g seat`
 existed, `XDG_RUNTIME_DIR`, and the standard system groups. None of it is
 error-prone once known and all of it is invisible until something fails.
 
+### /run must be a tmpfs, and PATH must include /usr/local
+
+Two gaps found only once a desktop was running on the machine.
+
+`/run` was on disk, so sockets outlived the sessions that made them: eleven
+dead sway IPC sockets from six sessions. Anything picking "the" socket by
+globbing the directory then talks to a corpse -- and that fails by returning
+nothing rather than erroring, so it reads as "sway has no windows" rather than
+"you are asking a sway that no longer exists". Three diagnostic passes were
+wasted on it. init mounts it as tmpfs now.
+
+`/etc/profile` set `PATH=/bin:/sbin:/usr/bin:/usr/sbin`, with no `/usr/local`.
+Anything compiled on the machine was invisible unless typed as a full path.
+
 ### Hardware lies
 
 The monitor reports `eld_valid 0` over HDMI -- "I have no audio" -- and plays

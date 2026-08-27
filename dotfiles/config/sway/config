@@ -236,7 +236,6 @@ bindsym $mod+r mode "resize"
     bindsym --locked XF86MonBrightnessUp exec brightnessctl set 5%+
 
     # Special key to take a screenshot with grim
-    bindsym Print exec grim
 
 #
 # Status Bar:
@@ -357,3 +356,39 @@ exec_always rm -f $wobsock && mkfifo -m 600 $wobsock && tail -f $wobsock | wob
 bindsym --locked XF86AudioRaiseVolume exec pactl set-sink-volume @DEFAULT_SINK@ +5% && pactl get-sink-volume @DEFAULT_SINK@ | head -n1 | awk '{print substr($5, 1, length($5)-1)}' > $wobsock
 bindsym --locked XF86AudioLowerVolume exec pactl set-sink-volume @DEFAULT_SINK@ -5% && pactl get-sink-volume @DEFAULT_SINK@ | head -n1 | awk '{print substr($5, 1, length($5)-1)}' > $wobsock
 bindsym --locked XF86AudioMute exec pactl set-sink-mute @DEFAULT_SINK@ toggle && (pactl get-sink-mute @DEFAULT_SINK@ | grep -q yes && echo 0 > $wobsock || pactl get-sink-volume @DEFAULT_SINK@ | head -n1 | awk '{print substr($5, 1, length($5)-1)}' > $wobsock)
+
+# ============================================================
+#  Notifications, night light, lock, screenshots
+# ============================================================
+
+# Notifications. Without a daemon listening, programs that try to notify you
+# fail silently -- nothing appears and nothing complains.
+exec mako
+
+# Night light. Warms the screen after sunset, like macOS Night Shift.
+# The coordinates are Kathmandu; wlsunset works out sunrise and sunset from
+# them rather than from a fixed clock time.
+exec wlsunset -l 27.7 -L 85.3 -t 3500 -T 6500
+
+# Blank the screen after 10 minutes, lock after 15, and lock before sleeping.
+# swayidle only watches the clock -- swaylock does the locking, and the
+# 'resume' line is what turns the screen back on afterwards.
+exec swayidle -w \
+    timeout 600 'swaymsg "output * power off"' \
+    resume      'swaymsg "output * power on"' \
+    timeout 900 'swaylock -f -c 1c1c1c' \
+    before-sleep 'swaylock -f -c 1c1c1c'
+
+# Lock now. Ctrl+Cmd+Q on macOS.
+bindsym $mod+Ctrl+q exec swaylock -f -c 1c1c1c
+
+# Screenshots. Print takes the whole screen; Shift+Print lets you drag a
+# region. Both land in ~/Pictures/Screenshots with the time in the name.
+#
+# Not Cmd+Shift+3 and 4 as on macOS: those keys already move windows to
+# workspaces 3 and 4 here.
+# The notify-send call is the point: grim is silent, so without it a
+# screenshot looks exactly like a key that does nothing. The file was being
+# written all along.
+bindsym Print exec f=~/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png && grim "$f" && notify-send -t 2000 "Screenshot" "$(basename $f)"
+bindsym Shift+Print exec f=~/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png && grim -g "$(slurp)" "$f" && notify-send -t 2000 "Screenshot" "$(basename $f)"
