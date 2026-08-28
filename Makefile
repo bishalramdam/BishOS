@@ -62,10 +62,32 @@ KERNEL_SHA256 = f5d44b93808b02cc2969c5404ba081d97523719c9fd2ba2de6db318b4141cca0
 # selected by fbcon=font:TER16x32 on the command line. It has to be compiled
 # in: changing fonts at runtime needs font *files*, which a system this small
 # does not carry.
+#
+# The second group was set by hand on the machine and lived only in that
+# build tree until it was found by diffing the running kernel against this
+# list. Everything here is invisible until the exact thing it provides is
+# missing, and none of it announces itself as a kernel problem:
+#
+# SND_HDA_CODEC_HDMI is the one that mattered. Upstream defconfig does not
+# set it, so an ISO built from this Makefile had no HDMI audio codec at all
+# -- and a machine whose speakers hang off the monitor is then silent in a
+# way that looks like PipeWire, or the mixer, or the monitor lying about its
+# ELD. An evening went into that once already, on a kernel that happened to
+# have the codec.
+#
+# SND_HDA_CODEC_REALTEK is the onboard analogue output, same reasoning.
+# KERNEL_ZSTD compresses the image with zstd, which decompresses faster than
+# gzip at boot. SENSORS_CORETEMP is CPU temperature, which is how the thermal
+# readings in the README were taken. TUN, VETH, BRIDGE and USER_NS are the
+# virtual networking containers need, WIREGUARD is the VPN, and NF_TABLES is
+# nftables -- upstream's iptables options went away in the same edit.
 KERNEL_CONFIG_ENABLE = FB FB_EFI FB_VESA FRAMEBUFFER_CONSOLE \
                        FRAMEBUFFER_CONSOLE_DETECT_PRIMARY \
                        DRM_FBDEV_EMULATION DRM_SIMPLEDRM SYSFB_SIMPLEFB \
-                       FONTS FONT_TER16x32
+                       FONTS FONT_TER16x32 \
+                       SND_HDA_CODEC_HDMI SND_HDA_CODEC_REALTEK \
+                       KERNEL_ZSTD SENSORS_CORETEMP \
+                       TUN VETH BRIDGE USER_NS WIREGUARD NF_TABLES
 
 # Reject anything that is not one of the two, before a single command runs.
 # An unknown ARCH used to fall through to the x86_64 branch below, so

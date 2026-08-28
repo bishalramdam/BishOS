@@ -70,6 +70,31 @@ Options are written straight into `.config` now. After `make olddefconfig`,
 always `grep '^CONFIG_X=' .config`. An option whose dependencies are unmet is
 dropped without a word.
 
+### A kernel built by hand drifts from the one the Makefile builds
+
+`make kernel` builds inside Docker from upstream `defconfig` plus the symbols
+in `KERNEL_CONFIG_ENABLE`. A kernel compiled by hand in `~/kernel` does not go
+through any of that, so options set there exist nowhere the repository can see
+them.
+
+Eight had accumulated that way. The one that mattered was
+`SND_HDA_CODEC_HDMI`: upstream defconfig does not set it, so every ISO this
+Makefile produced had no HDMI audio codec, on a machine whose only speakers
+are in the monitor. That failure does not look like a kernel problem -- it
+looks like PipeWire, or the mixer, or the monitor lying about its ELD, all of
+which have been suspected here before for other reasons.
+
+**So:** after configuring a kernel by hand, diff it against what the Makefile
+would produce before assuming the two agree:
+
+```bash
+cd ~/kernel/linux-<version> && make savedefconfig
+comm -13 <(sort arch/x86/configs/x86_64_defconfig) <(sort defconfig)
+```
+
+Anything in that output and not in `KERNEL_CONFIG_ENABLE` is a difference that
+will vanish the next time an ISO is built.
+
 ### Building a kernel is three commands
 
 ```bash
@@ -161,6 +186,6 @@ and is compiled into init's banner, and CI fails if a tag disagrees with it.
 | `src/init.c` | PID 1: mounts, `switch_root`, service supervision, logging |
 | `etc/bishos/services` | The service table |
 | `etc/bishos/*` | Scripts init runs: console, network, sshd, install |
-| `config/bishos_*_defconfig` | Tracked kernel configuration |
+| `config/bishos_*_defconfig` | Snapshot of the running kernel's config. A record, not build input -- `make kernel` builds from upstream defconfig plus `KERNEL_CONFIG_ENABLE` |
 | `Makefile` | Everything. Docker for reproducibility |
 | `tools/` | Small utilities that are not part of the OS |
