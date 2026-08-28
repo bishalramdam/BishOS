@@ -1,0 +1,28 @@
+#!/sbin/openrc-run
+# busybox ntpd, running as root so it can write the hardware clock.
+#
+# Alpine's own ntpd script drops to the "ntp" user and relies on cap_sys_time
+# to adjust the clock. That works for the clock in RAM, but not for the step
+# script: /etc/bishos/ntp-step runs "hwclock -w" to push the corrected time
+# back into the RTC, and writing /dev/rtc needs root. Under the ntp user that
+# write fails silently -- the script ends every line with "|| true" -- and the
+# correction is lost at the next power cut.
+#
+# That matters on this machine specifically. OpenRC's hwclock service saves
+# the RTC at a clean shutdown, and this machine keeps not getting one: the
+# power supply drops out under load, so the clock would drift back every time.
+#
+# The pools are named individually rather than using pool.ntp.org, and -S
+# points at the step script, both matching what the old service table ran.
+description="Network time, with the corrected time written back to the RTC"
+
+command="/sbin/ntpd"
+command_args="-S /etc/bishos/ntp-step -p 0.pool.ntp.org -p 1.pool.ntp.org -n"
+pidfile="/run/bishos-ntpd.pid"
+command_background=true
+
+depend() {
+    need net
+    provide ntp-client
+    use dns
+}

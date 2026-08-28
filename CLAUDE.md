@@ -95,11 +95,57 @@ comm -13 <(sort arch/x86/configs/x86_64_defconfig) <(sort defconfig)
 Anything in that output and not in `KERNEL_CONFIG_ENABLE` is a difference that
 will vanish the next time an ISO is built.
 
+### This machine cannot build with -j4
+
+Two kernel builds died mid-compile, each time as an instant power-off with no
+warning. Not a crash and not a clean shutdown -- the power simply went. The
+logs showed no thermal warning, no throttling and no machine check, memory was
+barely used, and a temperature log through a successful `-j2` build peaked at
+43 C against a 100 C limit.
+
+Four cores at 100% for many minutes is the heaviest sustained load this machine
+ever sees, and the power supply cannot hold it. Heat is not the mechanism.
+
+**So:** build with `make -j2`. It takes longer and it finishes.
+
+### A power cut leaves object files that are not objects
+
+After those two cuts the tree was full of wreckage, and it failed the build in
+two different ways an hour apart:
+
+- 22 objects truncated to zero length. `fixdep` died on a missing `.o.d` while
+  a stale `.cmd` claimed the work was done.
+- 3 objects with a plausible size and no ELF header, which only surfaced at
+  link time as `member arch/x86/kernel/cpu/bugs.o in archive is not an object`.
+
+Scanning for zero-length files finds the first kind and misses the second.
+Check the header instead:
+
+```bash
+find . -name '*.o' | while read -r f; do
+    [ "$(head -c4 "$f" | od -An -tx1 | tr -d ' \n')" = "7f454c46" ] || echo "$f"
+done
+```
+
+Delete each one along with its `.cmd` and `.d`, and `vmlinux.a`, `vmlinux.o`
+and `built-in.a`, which still name the dead members. Then rebuild. That is far
+cheaper than `make clean`, which costs the whole two hours.
+
+### BusyBox date has no %N
+
+`date +%s%N` prints seconds and leaves the `%N` unexpanded, so millisecond
+arithmetic collapses to zero. A program that ran for four seconds was measured
+as running for 0 ms, and the conclusion drawn was that it exited instantly.
+Half an hour went into debugging a program that was working.
+
+**So:** time things with `time`, and distrust a measurement before distrusting
+the thing measured.
+
 ### Building a kernel is three commands
 
 ```bash
-make -j4 bzImage      # the image
-make -j4 modules      # anything set to =m
+make -j2 bzImage      # the image -- -j2, see above
+make -j2 modules      # anything set to =m
 sudo make modules_install
 ```
 
@@ -131,6 +177,38 @@ Assume nothing is present until checked:
 - Prebuilt binaries from the internet are glibc-linked and fail with
   `not found` -- which names the missing loader, not the missing file.
 
+### The installed system boots without an initramfs; the ISO cannot
+
+An installed root boots straight from the kernel: every driver needed to reach
+it is built in, so `root=PARTUUID=... rootwait rw init=/bin/init` mounts the
+disk and hands to BusyBox init, which reads `/etc/inittab` and starts OpenRC.
+No initramfs is involved.
+
+The ISO still needs one and always will. A live image has no root partition, so
+its initramfs *is* the root -- and it is the only place `bishos-install` runs.
+`src/init.c` is therefore still built by the Makefile even though nothing on
+the installed machine runs it.
+
+Three things that cost time getting there:
+
+- The kernel accepts `root=PARTUUID=` and `root=PARTLABEL=` and nothing else.
+  A filesystem `LABEL=` is unreachable: the partition table is read before any
+  filesystem driver exists. Finding a root by filesystem label is exactly the
+  job an initramfs existed to do.
+- An initramfs embedded with `CONFIG_INITRAMFS_SOURCE` and a kernel that mounts
+  its own root are mutually exclusive. A built-in initramfs is always unpacked
+  and `/init` always runs from it, so `root=` is never reached. Embedding is
+  for keeping `init.c` in one file; it is not a step toward removing it.
+- Alpine's init scripts drop privileges to users BishOS never created --
+  `klogd` wants a `klogd` user, `ntpd` wants `ntp`. Both fail with what reads
+  as "not found" and is really a missing account. `ntpd` also has to run as
+  root here, because `/etc/bishos/ntp-step` writes the RTC with `hwclock -w`
+  and that needs root; under the `ntp` user the write fails silently on a
+  `|| true` and the corrected time never reaches the hardware clock.
+
+Alpine ships init scripts in separate `-openrc` subpackages. The base package
+contains none, so `apk add openrc` alone leaves `/etc/init.d` almost empty.
+
 ### There is no udev, no logind, no systemd
 
 A desktop assumes all three. What had to be added by hand: `seatd -g seat`
@@ -152,6 +230,24 @@ wasted on it. init mounts it as tmpfs now.
 
 `/etc/profile` set `PATH=/bin:/sbin:/usr/bin:/usr/sbin`, with no `/usr/local`.
 Anything compiled on the machine was invisible unless typed as a full path.
+
+### sway splits a config line on ";" before any shell sees it
+
+    exec_always pkill -x matrix-rain; matrix-rain --cell 12 ...
+
+ran `exec_always pkill -x matrix-rain`, which succeeded and did nothing, and
+then tried `matrix-rain` as a sway command. `swaymsg` says so plainly --
+`{"success": false, "error": "Unknown/invalid command 'matrix-rain'"}` -- but
+the wallpaper simply never appeared, which looks like the program failing.
+Quote the whole thing so it reaches `sh` as one command.
+
+### A process name is truncated to 15 characters
+
+`matrix-wallpaper` is 16, so it appeared in `/proc` as `matrix-wallpape` and
+`pkill -x matrix-wallpaper` matched nothing -- every config reload stacked
+another copy. `pkill -f` matches, but it also matches the shell sway runs the
+line in and kills the parent before the program starts. Name things so they
+fit.
 
 ### Hardware lies
 

@@ -1,0 +1,22 @@
+#!/sbin/openrc-run
+# Device permissions for a desktop without logind.
+#
+# There is no logind here to hand a session ownership of the GPU and input
+# devices, so the groups are set by hand. This has to run after udev has
+# created the nodes and before seatd tries to open them.
+description="Group ownership for /dev/dri and /dev/input"
+
+depend() {
+    need udev
+    before seatd
+}
+
+start() {
+    ebegin "Setting device permissions"
+    /bin/sh /etc/bishos/devperms
+    eend $?
+}
+
+stop() {
+    return 0
+}

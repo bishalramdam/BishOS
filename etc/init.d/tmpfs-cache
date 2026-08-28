@@ -1,0 +1,24 @@
+#!/sbin/openrc-run
+# Chromium's cache in RAM rather than on the USB stick.
+#
+# Only Chromium: the rest of ~/.cache is small, rarely written, and some of it
+# is worth keeping across a reboot. See etc/bishos/tmpfs-cache.
+description="Mount the browser cache on tmpfs"
+
+depend() {
+    need localmount
+}
+
+start() {
+    ebegin "Mounting the browser cache in RAM"
+    /bin/sh /etc/bishos/tmpfs-cache
+    eend $?
+}
+
+stop() {
+    ebegin "Unmounting browser caches"
+    for m in $(awk '$2 ~ /\.cache\/chromium$/ { print $2 }' /proc/mounts); do
+        umount "$m" 2>/dev/null
+    done
+    eend 0
+}

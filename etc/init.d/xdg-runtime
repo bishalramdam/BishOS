@@ -1,0 +1,36 @@
+#!/sbin/openrc-run
+# Create /run/user/<uid> before anyone logs in.
+#
+# Wayland wants a private directory for its sockets, and on a normal system a
+# login manager creates it -- BishOS has none. /etc/profile used to do it at
+# login instead, which cannot work: /run is a fresh tmpfs every boot and is
+# owned by root, so the mkdir fails with "Permission denied" and the profile
+# then retries under sudo, which stops and asks for a password before the
+# desktop has even started.
+#
+# Doing it here removes both. The directory exists, owned correctly, before
+# getty offers a login prompt.
+#
+# Users are found rather than named, the same way tmpfs-cache does it: BishOS
+# asks for a username on first boot, so there is nothing to hard-code.
+description="Per-user runtime directories for Wayland sockets"
+
+depend() {
+    need localmount
+    before seatd
+}
+
+start() {
+    ebegin "Creating per-user runtime directories"
+    awk -F: '$3 >= 1000 && $3 < 65534 { print $3 ":" $4 }' /etc/passwd |
+    while IFS=: read -r uid gid; do
+        mkdir -p "/run/user/$uid"
+        chown "$uid:$gid" "/run/user/$uid"
+        chmod 700 "/run/user/$uid"
+    done
+    eend 0
+}
+
+stop() {
+    return 0
+}

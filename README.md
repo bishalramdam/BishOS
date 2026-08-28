@@ -53,6 +53,38 @@ Builds for **two architectures** from the same source:
 +-------------------------------------------------------------+
 ```
 
+### Two boot paths
+
+The diagram above is how the **ISO** boots, and it has to: a live image has no
+root partition, so its initramfs *is* the root. That is the one situation an
+initramfs genuinely solves, and it is the only place `bishos-install` can run.
+
+An **installed** system no longer uses any of it. Every driver needed to reach
+the root -- `ahci`, `sd`, `usb-storage`, `ext4` -- is built into the kernel, so
+the kernel mounts the root itself and there is nothing left for an initramfs to
+do:
+
+```
+kernel  ->  mounts root by PARTUUID, waits for it with rootwait
+        ->  /bin/init (BusyBox), which reads /etc/inittab
+        ->  OpenRC brings up the services
+        ->  getty on tty1  ->  login  ->  .bash_profile  ->  sway
+```
+
+`root=` names a GPT **PARTUUID**, not the filesystem label the initramfs used.
+The kernel reads the partition table before any filesystem driver exists, so a
+label stored *inside* a filesystem cannot be read at that point; the kernel
+accepts only `PARTUUID=` and `PARTLABEL=`. PARTUUID also stays unambiguous once
+a second partition labelled BISHOS exists on another disk.
+
+`rootwait` replaces the 45-second wait `init.c` did by hand, and waits as long
+as it takes rather than giving up.
+
+Both paths are in the boot menu, so the old one is always one keypress away.
+`/sbin/init` is still the `init.c` binary and the default entry names
+`init=/bin/init` explicitly, which is what lets the two coexist with nothing
+on disk renamed.
+
 ---
 
 ## 🚀 Quickstart

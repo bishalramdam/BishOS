@@ -1,0 +1,29 @@
+#!/sbin/openrc-run
+# Bring the network up the way BishOS already does.
+#
+# Alpine's own "networking" script reads /etc/network/interfaces, which does
+# not exist here -- BishOS has always configured eth0 from /etc/bishos/net-up
+# instead. That script is proven on this hardware, including the DHCP-supplied
+# DNS, so it is wrapped rather than replaced. Moving to /etc/network/interfaces
+# is a separate change and should not be made in the same step as changing
+# PID 1: if the network fails to come up, the machine is unreachable and the
+# only way back is the console.
+description="Configure eth0 using /etc/bishos/net-up"
+
+depend() {
+    need localmount
+    want udev
+    provide net
+}
+
+start() {
+    ebegin "Configuring the network"
+    /bin/sh /etc/bishos/net-up
+    eend $?
+}
+
+stop() {
+    ebegin "Taking the network down"
+    ifconfig eth0 down 2>/dev/null
+    eend 0
+}
