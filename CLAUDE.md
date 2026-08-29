@@ -209,6 +209,32 @@ Three things that cost time getting there:
 Alpine ships init scripts in separate `-openrc` subpackages. The base package
 contains none, so `apk add openrc` alone leaves `/etc/init.d` almost empty.
 
+### parted counts in GB, resize2fs counts in GiB
+
+Shrinking the 1 TB drive to make room for a root partition, the filesystem was
+resized with `resize2fs /dev/sda1 700G` -- 700 **GiB**, 751.6 billion bytes.
+The next step was going to be `parted ... resizepart 1 705GB`, which looks like
+a safe 5 GB of slack and is not: parted's `GB` is 10^9, so 705GB is 656 GiB.
+That is 44 GiB *smaller* than the filesystem, and shrinking a partition below
+its filesystem truncates it. The disk held 117 GB of the user's academic work.
+
+Caught only because parted printed `Disk /dev/sda: 1000GB` for a drive every
+other tool calls 931 GB.
+
+**So:** the first command inside parted is `unit GiB`. Then every number on
+screen matches what resize2fs, lsblk and df report, and the comparison is
+direct rather than arithmetic.
+
+Two more things from that migration:
+
+- `resize2fs` prints one line when it starts and one when it finishes, and
+  nothing in between. A 916 GB to 700 GB shrink moved 34 GB and took about
+  forty minutes in complete silence. Progress is visible only in
+  `/sys/block/sda/stat`, where fields 3 and 7 are sectors read and written.
+- Shrink order is filesystem first, then partition. Growing is the reverse.
+  The rule underneath is that the filesystem must never be larger than the
+  partition holding it.
+
 ### There is no udev, no logind, no systemd
 
 A desktop assumes all three. What had to be added by hand: `seatd -g seat`

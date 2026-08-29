@@ -384,14 +384,18 @@ exec mako
 # them rather than from a fixed clock time.
 exec wlsunset -l 27.7 -L 85.3 -t 3500 -T 6500
 
-# Blank the screen after 10 minutes, lock after 15, and lock before sleeping.
-# swayidle only watches the clock -- swaylock does the locking, and the
-# 'resume' line is what turns the screen back on afterwards.
+# Blank the screen after 10 minutes. Nothing locks.
+#
+# swayidle only watches the clock; the commands do the work, and the 'resume'
+# line is what turns the screen back on. The timeout that ran swaylock is gone
+# deliberately: this machine sits at home and the password prompt guarded
+# against nobody, while locking you out of your own desktop after fifteen
+# minutes away from the keyboard. The monitor is the thing worth saving.
+#
+# swaylock is still installed, and $mod+Ctrl+q below locks on demand.
 exec swayidle -w \
     timeout 600 'swaymsg "output * power off"' \
-    resume      'swaymsg "output * power on"' \
-    timeout 900 'swaylock -f -c 1c1c1c' \
-    before-sleep 'swaylock -f -c 1c1c1c'
+    resume      'swaymsg "output * power on"'
 
 # Lock now. Ctrl+Cmd+Q on macOS.
 bindsym $mod+Ctrl+q exec swaylock -f -c 1c1c1c
