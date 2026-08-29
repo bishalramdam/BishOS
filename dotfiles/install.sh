@@ -32,6 +32,12 @@ link config/wob/wob.ini       .config/wob/wob.ini
 link config/foot/foot.ini       .config/foot/foot.ini
 link config/nwg-dock/style.css  .config/nwg-dock/style.css
 link config/gtk-3.0/settings.ini .config/gtk-3.0/settings.ini
+# GTK4 reads its own file and ignores the GTK3 one, so loupe and other GTK4
+# programs keep the default look unless this is linked too.
+link config/gtk-4.0/settings.ini .config/gtk-4.0/settings.ini
+# Renames Thunar to Finder in the launcher. A file here wins over the one in
+# /usr/share, so a package update will not overwrite it.
+link local/applications/thunar.desktop .local/share/applications/thunar.desktop
 link local/applications/chromium.desktop .local/share/applications/chromium.desktop
 link home/bashrc              .bashrc
 link home/bash_profile        .bash_profile

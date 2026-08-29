@@ -1,6 +1,12 @@
 # Login shells read this, not .bashrc. Source it so both behave the same.
 [ -f ~/.bashrc ] && . ~/.bashrc
 
+# The cursor theme, for programs that ask the environment rather than sway.
+# This must be set before sway starts -- it is inherited by everything sway
+# launches, and sway itself has no way to export a variable.
+export XCURSOR_THEME=WhiteSur-cursors
+export XCURSOR_SIZE=24
+
 # Start the desktop automatically when logging in at the machine itself.
 #
 # Guards, in order: not over ssh, not already inside a Wayland session, and

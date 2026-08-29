@@ -64,6 +64,20 @@ exec_always "pkill -x matrix-rain; matrix-rain --cell 12 --density 1.5 --fps 30"
 #
 # You can get the names of your outputs by running: swaymsg -t get_outputs
 
+# The mouse pointer, which GTK cannot set.
+#
+# GTK's gtk-cursor-theme-name only applies inside GTK windows. The pointer over
+# the desktop, over a terminal, and while dragging a window is sway's own, and
+# sway has to be told separately. Set only one of them and you get a macOS
+# pointer inside Thunar and the stock arrow everywhere else, which reads as
+# broken rather than as a mixture.
+#
+# XCURSOR_THEME is set in ~/.bash_profile rather than here, because programs
+# that talk to Wayland directly read it from the environment, and sway cannot
+# export anything: "exec export FOO=bar" runs a subshell that sets a variable
+# and then exits.
+seat seat0 xcursor_theme WhiteSur-cursors 24
+
 ### Idle configuration
 #
 # Example configuration:
