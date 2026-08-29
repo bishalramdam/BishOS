@@ -333,6 +333,18 @@ floating_modifier $mod normal
 # --- macOS keys. On a Mac keyboard, Super IS the Cmd key. ---
 bindsym $mod+q kill
 bindsym $mod+Shift+w kill
+
+# Middle-click a titlebar to close the window.
+#
+# sway draws no window buttons and cannot be made to: an i3-style titlebar is
+# the title text and nothing else, which is why Thunar has no close button
+# while loupe does -- loupe is GTK4 and draws its own headerbar, Thunar uses a
+# menubar and relies on sway's decoration.
+#
+# --border makes the binding apply only to clicks on the titlebar or frame, so
+# middle-clicking inside a document still does whatever the application does
+# with it. This is the nearest thing to a clickable close.
+bindsym --border button2 kill
 bindsym $mod+m move scratchpad
 bindsym $mod+Shift+m scratchpad show
 bindsym $mod+space exec $menu
