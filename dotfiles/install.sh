@@ -42,6 +42,8 @@ link config/nwg-panel/config              .config/nwg-panel/config
 link config/nwg-panel/style.css           .config/nwg-panel/style.css
 link config/nwg-panel/common-settings.json .config/nwg-panel/common-settings.json
 link config/nwg-panel/executors/network   .config/nwg-panel/executors/network
+link config/nwg-panel/executors/cpu       .config/nwg-panel/executors/cpu
+link config/nwg-panel/executors/memory    .config/nwg-panel/executors/memory
 link config/gtk-3.0/settings.ini .config/gtk-3.0/settings.ini
 # GTK4 reads its own file and ignores the GTK3 one, so loupe and other GTK4
 # programs keep the default look unless this is linked too.

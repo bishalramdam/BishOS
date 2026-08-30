@@ -1,0 +1,28 @@
+#!/bin/sh
+# CPU usage for an nwg-panel executor. One line out: the label.
+#
+# /proc/stat counts jiffies since boot in each state, not a percentage, so a
+# usage figure needs two readings and the gap between them. The previous one
+# lives in XDG_RUNTIME_DIR, which is a tmpfs -- no disk writes, empty at boot.
+#
+# idle is idle+iowait: a core waiting on the disk is not doing work, and on a
+# spinning disk that distinction is the difference between "busy" and "stuck".
+STATE="${XDG_RUNTIME_DIR:-/tmp}/nwg-cpu"
+
+set -- $(awk '/^cpu /{print $2,$3,$4,$5,$6,$7,$8}' /proc/stat)
+idle=$(( $4 + $5 ))
+total=$(( $1 + $2 + $3 + $4 + $5 + $6 + $7 ))
+
+pct=0
+if [ -r "$STATE" ]; then
+    read -r p_idle p_total < "$STATE" 2>/dev/null || true
+    d_idle=$(( idle - ${p_idle:-0} ))
+    d_total=$(( total - ${p_total:-0} ))
+    [ "$d_total" -gt 0 ] && pct=$(( 100 * (d_total - d_idle) / d_total ))
+fi
+echo "$idle $total" > "$STATE"
+
+[ "$pct" -lt 0 ] && pct=0
+[ "$pct" -gt 100 ] && pct=100
+echo "cpu-symbolic"
+echo "${pct}%"

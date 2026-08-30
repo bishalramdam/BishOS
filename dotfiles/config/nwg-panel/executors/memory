@@ -1,0 +1,17 @@
+#!/bin/sh
+# Memory usage for an nwg-panel executor. One line out: the label.
+#
+# MemAvailable, not MemFree. MemFree counts only untouched pages and reads
+# alarmingly low on any healthy system, because the kernel fills the rest with
+# cache it will hand back the moment anything asks. MemAvailable is the
+# kernel's own estimate of what a new process could actually get, which is the
+# number a person means by "free memory".
+echo "network-server-database-symbolic"
+awk '
+    /^MemTotal:/     { total = $2 }
+    /^MemAvailable:/ { avail = $2 }
+    END {
+        if (total > 0) printf "%d%%\n", 100 - (avail * 100 / total)
+        else           print "?"
+    }
+' /proc/meminfo

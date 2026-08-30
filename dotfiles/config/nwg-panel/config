@@ -24,6 +24,8 @@
             "clock"
         ],
         "modules-right": [
+            "executor-cpu",
+            "executor-memory",
             "tray",
             "executor-network"
         ],
@@ -274,6 +276,26 @@
             "tooltip-text": "eth0",
             "root-css-name": "root-executor",
             "css-name": "executor-network"
+        },
+        "executor-cpu": {
+            "script": "/home/bishal/.config/nwg-panel/executors/cpu",
+            "interval": 3,
+            "icon-placement": "left",
+            "icon-size": 16,
+            "tooltip-text": "click for btop",
+            "on-left-click": "foot -a btop btop",
+            "root-css-name": "root-executor",
+            "css-name": "executor-cpu"
+        },
+        "executor-memory": {
+            "script": "/home/bishal/.config/nwg-panel/executors/memory",
+            "interval": 3,
+            "icon-placement": "left",
+            "icon-size": 16,
+            "tooltip-text": "click for btop",
+            "on-left-click": "foot -a btop btop",
+            "root-css-name": "root-executor",
+            "css-name": "executor-memory"
         }
     }
 ]
