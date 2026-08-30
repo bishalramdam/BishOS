@@ -81,13 +81,19 @@ KERNEL_SHA256 = f5d44b93808b02cc2969c5404ba081d97523719c9fd2ba2de6db318b4141cca0
 # readings in the README were taken. TUN, VETH, BRIDGE and USER_NS are the
 # virtual networking containers need, WIREGUARD is the VPN, and NF_TABLES is
 # nftables -- upstream's iptables options went away in the same edit.
+#
+# I2C_CHARDEV creates /dev/i2c-*, which is how ddcutil reaches a monitor over
+# DDC/CI to set its actual backlight. Without it there is no device node to
+# open and ddcutil finds nothing, on a machine whose only display is external
+# and therefore has no /sys/class/backlight either.
 KERNEL_CONFIG_ENABLE = FB FB_EFI FB_VESA FRAMEBUFFER_CONSOLE \
                        FRAMEBUFFER_CONSOLE_DETECT_PRIMARY \
                        DRM_FBDEV_EMULATION DRM_SIMPLEDRM SYSFB_SIMPLEFB \
                        FONTS FONT_TER16x32 \
                        SND_HDA_CODEC_HDMI SND_HDA_CODEC_REALTEK \
                        KERNEL_ZSTD SENSORS_CORETEMP \
-                       TUN VETH BRIDGE USER_NS WIREGUARD NF_TABLES
+                       TUN VETH BRIDGE USER_NS WIREGUARD NF_TABLES \
+                       I2C_CHARDEV
 
 # Reject anything that is not one of the two, before a single command runs.
 # An unknown ARCH used to fall through to the x86_64 branch below, so

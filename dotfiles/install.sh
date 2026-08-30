@@ -35,6 +35,13 @@ link config/swayr/config.toml .config/swayr/config.toml
 link config/wob/wob.ini       .config/wob/wob.ini
 link config/foot/foot.ini       .config/foot/foot.ini
 link config/nwg-dock/style.css  .config/nwg-dock/style.css
+# The panel: which modules, where, and the throughput executor. Only the
+# files worth tracking -- nwg-panel also creates icon directories it fills
+# itself, and a lock file.
+link config/nwg-panel/config              .config/nwg-panel/config
+link config/nwg-panel/style.css           .config/nwg-panel/style.css
+link config/nwg-panel/common-settings.json .config/nwg-panel/common-settings.json
+link config/nwg-panel/executors/network   .config/nwg-panel/executors/network
 link config/gtk-3.0/settings.ini .config/gtk-3.0/settings.ini
 # GTK4 reads its own file and ignores the GTK3 one, so loupe and other GTK4
 # programs keep the default look unless this is linked too.

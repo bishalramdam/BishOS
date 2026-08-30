@@ -1,0 +1,17 @@
+// Let members of wheel mount disks.
+//
+// polkit's default udisks2 policy allows mounting from an "active local
+// session", and it asks logind whether a session is active and local. BishOS
+// has no logind -- it uses seatd, which polkit cannot query -- so polkit sees
+// no session at all and denies everything with "not authorized", however
+// obviously you are sitting at the machine.
+//
+// Group membership is the substitute. It is a real widening: anyone in wheel
+// can mount any disk without a password, including over ssh. On a single-user
+// desktop where wheel already means full sudo, that grants nothing new.
+polkit.addRule(function (action, subject) {
+    if (action.id.indexOf("org.freedesktop.udisks2.") === 0 &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

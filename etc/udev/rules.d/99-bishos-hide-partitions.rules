@@ -1,0 +1,12 @@
+# Keep system partitions out of the file manager's sidebar.
+#
+# udisks2 offers every block device it can see, so Thunar listed the EFI
+# System Partition alongside real data disks -- something you can only break
+# by opening, never usefully browse. UDISKS_IGNORE=1 tells udisks2 to pretend
+# it is not there.
+#
+# Matched by filesystem label rather than device name, because sda/sdb/sdc
+# ordering is not stable across boots.
+ENV{ID_FS_LABEL}=="BISHOS-ESP", ENV{UDISKS_IGNORE}="1"
+ENV{ID_FS_LABEL}=="BISHOS-SWAP", ENV{UDISKS_IGNORE}="1"
+ENV{ID_FS_TYPE}=="swap", ENV{UDISKS_IGNORE}="1"

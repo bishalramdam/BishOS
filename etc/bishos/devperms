@@ -5,8 +5,15 @@
 addgroup -S video 2>/dev/null
 addgroup -S render 2>/dev/null
 addgroup -S input 2>/dev/null
+# i2c is for DDC/CI: ddcutil sets the monitor's real backlight by talking to
+# it over the HDMI cable's data lines, through /dev/i2c-*. ddcutil ships a
+# udev rule wanting GROUP="i2c", but that group has to exist for udev to
+# apply it, and its other rule tags the node "uaccess" -- which grants the
+# active session user access through logind, and there is no logind here.
+addgroup -S i2c 2>/dev/null
 
 for d in /dev/dri/card*;    do [ -e "$d" ] && chgrp video "$d" && chmod 660 "$d"; done
 for d in /dev/dri/renderD*; do [ -e "$d" ] && chgrp render "$d" && chmod 660 "$d"; done
 for d in /dev/input/*;     do [ -e "$d" ] && chgrp input  "$d" && chmod 660 "$d"; done
+for d in /dev/i2c-*;       do [ -e "$d" ] && chgrp i2c    "$d" && chmod 660 "$d"; done
 exit 0

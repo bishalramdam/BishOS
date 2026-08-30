@@ -1,0 +1,78 @@
+#!/bin/sh
+# Set the monitor's brightness over DDC/CI.
+#
+# A port of the macOS display dimmer's preferred path. That project has two
+# backends -- DDC/CI where the monitor supports it, and a GPU gamma ramp where
+# it does not -- and only the first one is worth having: gamma dimming makes
+# the picture darker while the backlight burns exactly as much power, and
+# black stays black instead of getting dimmer. This monitor answers DDC/CI
+# (VCP 2.1, feature 0x10), so the real backlight is available.
+#
+# The gamma fallback is also unavailable here for a second reason: wlsunset
+# already holds wlr-gamma-control, and only one client can.
+#
+#     dim            show the current level
+#     dim 60         set 60%
+#     dim +10        raise by 10
+#     dim -10        lower by 10
+#     dim reset      back to 100%
+#     dim probe      which monitors answer DDC/CI
+#
+# Each ddcutil call takes a noticeable moment: I2C over the display cable runs
+# at a few kilohertz, so a read and a write are tens of milliseconds. That is
+# why there is no smooth fade -- stepping would be visibly stuttery rather
+# than smooth, which is worse than an instant change.
+set -e
+
+VCP=10   # the DDC/CI feature code for Brightness
+
+usage() {
+    sed -n '4,20p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+current() {
+    ddcutil getvcp $VCP --terse 2>/dev/null | awk '{print $4}'
+}
+
+set_level() {
+    level=$1
+    [ "$level" -lt 0 ] && level=0
+    [ "$level" -gt 100 ] && level=100
+    ddcutil setvcp $VCP "$level" >/dev/null 2>&1 || {
+        echo "dim: could not set brightness." >&2
+        echo "dim: is your user in the i2c group? try: id -nG" >&2
+        exit 1
+    }
+    echo "brightness: $level%"
+}
+
+case "${1:-status}" in
+    status|"")
+        cur=$(current)
+        [ -n "$cur" ] || { echo "dim: no DDC/CI monitor found. try: dim probe" >&2; exit 1; }
+        echo "brightness: $cur%"
+        ;;
+    probe)
+        ddcutil detect
+        ;;
+    reset)
+        set_level 100
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+    +*)
+        set_level $(( $(current) + ${1#+} ))
+        ;;
+    -[0-9]*)
+        set_level $(( $(current) - ${1#-} ))
+        ;;
+    *[!0-9]*)
+        echo "dim: '$1' is not a number, +N, -N, reset, probe or status" >&2
+        exit 1
+        ;;
+    *)
+        set_level "$1"
+        ;;
+esac

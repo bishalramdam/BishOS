@@ -1,0 +1,50 @@
+#!/bin/sh
+# Network throughput for an nwg-panel executor.
+#
+# Two lines out: an icon name, then the label.
+#
+# The kernel counts bytes since boot in
+#   /sys/class/net/<if>/statistics/{rx,tx}_bytes
+# which are totals, not rates. A rate needs two readings and the time between
+# them, so the previous pair is kept in a state file under XDG_RUNTIME_DIR --
+# a tmpfs, so it costs no disk writes and starts empty every boot.
+#
+# There is no NetworkManager here; eth0 comes up from /etc/bishos/net-up with
+# busybox udhcpc, so nmcli and everything built on it would find nothing.
+IFACE=eth0
+STATE="${XDG_RUNTIME_DIR:-/tmp}/nwg-net-$IFACE"
+
+[ -e "/sys/class/net/$IFACE" ] || { echo "network-offline-symbolic"; echo "no $IFACE"; exit 0; }
+
+if [ "$(cat /sys/class/net/$IFACE/operstate 2>/dev/null)" != "up" ]; then
+    echo "network-wired-disconnected-symbolic"; echo "offline"; exit 0
+fi
+
+rx=$(cat "/sys/class/net/$IFACE/statistics/rx_bytes" 2>/dev/null || echo 0)
+tx=$(cat "/sys/class/net/$IFACE/statistics/tx_bytes" 2>/dev/null || echo 0)
+now=$(date +%s)
+
+# Bytes per second, rendered short. Anything under a kilobyte reads as 0.
+rate() {
+    b=$1
+    if   [ "$b" -ge 1048576 ]; then printf '%d.%dM' $((b/1048576)) $(( (b%1048576)*10/1048576 ))
+    elif [ "$b" -ge 1024 ];    then printf '%dK' $((b/1024))
+    else                            printf '%dB' "$b"
+    fi
+}
+
+down=0; up=0
+if [ -r "$STATE" ]; then
+    read -r p_rx p_tx p_t < "$STATE" 2>/dev/null || true
+    elapsed=$(( now - ${p_t:-now} ))
+    # A first run, a clock jump, or a counter reset all give nonsense; show zero
+    # rather than a spike.
+    if [ "${elapsed:-0}" -gt 0 ] && [ "$rx" -ge "${p_rx:-0}" ] && [ "$tx" -ge "${p_tx:-0}" ]; then
+        down=$(( (rx - p_rx) / elapsed ))
+        up=$((   (tx - p_tx) / elapsed ))
+    fi
+fi
+echo "$rx $tx $now" > "$STATE"
+
+echo "network-wired-symbolic"
+echo "$(rate $down)↓ $(rate $up)↑"
