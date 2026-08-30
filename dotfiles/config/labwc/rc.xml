@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<!--
+  labwc, configured to look like macOS.
+
+  The reason this exists: sway draws no window buttons and cannot be made to,
+  so Thunar and foot have bare titlebars while Chromium and loupe draw their
+  own. labwc draws real titlebar buttons for every window, which is the only
+  way to make that consistent.
+
+  This is a second desktop, not a replacement. Sway is untouched; ~/.use-labwc
+  chooses between them at login.
+-->
+<labwc_config>
+
+  <theme>
+    <name>Clearlooks-3.4</name>
+    <cornerRadius>10</cornerRadius>
+    <!--
+      Buttons on the left, macOS order. Everything before the colon is drawn
+      on the left and everything after it on the right, the same convention
+      GTK uses for gtk-decoration-layout. Ending on the colon leaves the right
+      side empty.
+    -->
+    <titlebar>
+      <layout>close,iconify,max:</layout>
+      <showTitle>yes</showTitle>
+    </titlebar>
+    <font place="ActiveWindow">
+      <name>DejaVu Sans</name>
+      <size>11</size>
+    </font>
+  </theme>
+
+  <!-- Click to focus, like macOS. Sloppy focus is the Unix habit, not the Mac one. -->
+  <focus>
+    <followMouse>no</followMouse>
+    <raiseOnFocus>yes</raiseOnFocus>
+  </focus>
+
+  <!-- Drag a window to a screen edge to tile it against that half. -->
+  <snapping>
+    <range>10</range>
+    <topMaximize>yes</topMaximize>
+  </snapping>
+
+  <keyboard>
+    <!--
+      W is the Super key, which is Cmd on a Mac keyboard, so these read the
+      way they do on macOS. swaymsg does not exist here, so nothing from the
+      sway config carries over -- these are written from scratch.
+    -->
+    <keybind key="W-q"><action name="Close"/></keybind>
+    <keybind key="W-Return"><action name="Execute"><command>foot</command></action></keybind>
+    <keybind key="W-d"><action name="Execute"><command>fuzzel</command></action></keybind>
+    <keybind key="W-e"><action name="Execute"><command>thunar</command></action></keybind>
+    <keybind key="W-f"><action name="ToggleFullscreen"/></keybind>
+    <keybind key="W-m"><action name="Iconify"/></keybind>
+    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
+    <keybind key="W-Tab"><action name="NextWindow"/></keybind>
+    <keybind key="W-S-e"><action name="Exit"/></keybind>
+
+    <!-- Volume, using the same wob overlay the sway config feeds. -->
+    <keybind key="XF86_AudioRaiseVolume">
+      <action name="Execute"><command>sh -c 'pactl set-sink-volume @DEFAULT_SINK@ +5%'</command></action>
+    </keybind>
+    <keybind key="XF86_AudioLowerVolume">
+      <action name="Execute"><command>sh -c 'pactl set-sink-volume @DEFAULT_SINK@ -5%'</command></action>
+    </keybind>
+    <keybind key="XF86_AudioMute">
+      <action name="Execute"><command>sh -c 'pactl set-sink-mute @DEFAULT_SINK@ toggle'</command></action>
+    </keybind>
+  </keyboard>
+
+  <mouse>
+    <!-- Middle-click a titlebar to close, matching the sway binding. -->
+    <context name="Titlebar">
+      <mousebind button="Middle" action="Press"><action name="Close"/></mousebind>
+    </context>
+  </mouse>
+
+</labwc_config>

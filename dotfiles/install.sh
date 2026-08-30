@@ -26,6 +26,10 @@ link() {
 }
 
 link config/sway/config       .config/sway/config
+# labwc, the second compositor. ~/.use-labwc chooses it at login.
+link config/labwc/rc.xml         .config/labwc/rc.xml
+link config/labwc/autostart      .config/labwc/autostart
+link config/labwc/environment    .config/labwc/environment
 link config/fuzzel/fuzzel.ini .config/fuzzel/fuzzel.ini
 link config/swayr/config.toml .config/swayr/config.toml
 link config/wob/wob.ini       .config/wob/wob.ini
@@ -38,6 +42,9 @@ link config/gtk-4.0/settings.ini .config/gtk-4.0/settings.ini
 # Renames Thunar to Finder in the launcher. A file here wins over the one in
 # /usr/share, so a package update will not overwrite it.
 link local/applications/thunar.desktop .local/share/applications/thunar.desktop
+# The packaged typobuster.desktop has no %f, so opening a file with it opened
+# nothing. This one passes the path and declares the MIME types.
+link local/applications/typobuster.desktop .local/share/applications/typobuster.desktop
 link local/applications/chromium.desktop .local/share/applications/chromium.desktop
 link home/bashrc              .bashrc
 link home/bash_profile        .bash_profile

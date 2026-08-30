@@ -50,6 +50,22 @@ alias cls='printf "\033c"'
 # Switch into HOME directory on login
 cd "$HOME" 2>/dev/null || cd /
 
+# A locale, because a great deal of software assumes LANG exists and crashes
+# without checking. nwg-panel-config died on
+#
+#     os.getenv("LANG").split(".")[0]
+#
+# which is AttributeError: 'NoneType' has no attribute 'split' -- a stack trace
+# about strings, from a variable nobody set.
+#
+# C.UTF-8 rather than en_US.UTF-8 because musl implements only the C and POSIX
+# locales plus UTF-8 character handling; naming a locale it does not have would
+# be a fiction that some programs check for and others do not. Software that
+# splits LANG on "." gets "C", finds no translation for it, and falls back to
+# English, which is the intended result here anyway.
+export LANG=C.UTF-8
+export LC_COLLATE=C
+
 # Wayland compositors keep their sockets in a private per-user directory and
 # refuse to start without one. On a normal system a login manager creates it;
 # BishOS has none, so it is made here at login.

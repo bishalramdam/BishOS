@@ -1,0 +1,7 @@
+# Read by labwc before anything starts.
+#
+# XCURSOR_THEME has to be here as well as in .bash_profile: programs launched
+# by labwc's autostart inherit labwc's environment, not the login shell's.
+XCURSOR_THEME=WhiteSur-cursors
+XCURSOR_SIZE=24
+XDG_CURRENT_DESKTOP=labwc

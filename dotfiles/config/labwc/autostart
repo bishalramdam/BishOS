@@ -1,0 +1,22 @@
+#!/bin/sh
+# Started by labwc once the compositor is up.
+#
+# Everything here is a layer-shell client and knows nothing about which
+# compositor it is talking to, which is why the same programs the sway config
+# starts work unchanged. Nothing that calls swaymsg can be here.
+
+# The wallpaper. Same binary, same options as the sway config.
+matrix-rain --cell 12 --density 1.5 --fps 30 &
+
+# The dock.
+nwg-dock -d -hd 0 -nows -i 48 -p bottom &
+
+# Blank the screen after ten minutes. No locking, deliberately -- same
+# reasoning as the sway config.
+swayidle -w \
+    timeout 600 'wlopm --off \*' \
+    resume      'wlopm --on \*' &
+
+# Volume overlay: wob reads a FIFO that the volume keybindings write to.
+[ -p /tmp/wob.sock ] || { rm -f /tmp/wob.sock; mkfifo /tmp/wob.sock; }
+tail -f /tmp/wob.sock | wob &

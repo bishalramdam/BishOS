@@ -1,0 +1,22 @@
+[Desktop Entry]
+# Local override of /usr/share/applications/typobuster.desktop.
+#
+# The shipped file has "Exec=typobuster" with no placeholder, so opening a file
+# with it launched an empty editor and dropped the filename -- which looks like
+# the editor ignoring you rather than a missing two characters. main.py does
+# accept a path: add_argument("file_path", nargs="?").
+#
+# It also declared no MimeType, so it never appeared in "Open With" lists even
+# though it is a text editor. Both fixed here rather than by patching the
+# packaged file, so an upgrade cannot undo it.
+Type=Application
+
+Name=Typobuster
+GenericName=Simple text editor
+Comment=Lightweight editor with text transformations and auto-correction
+
+Exec=typobuster %f
+Icon=typobuster
+Terminal=false
+Categories=Office;TextTools;TextEditor;
+MimeType=text/plain;text/markdown;text/csv;application/json;text/xml;application/xml;text/x-shellscript;text/x-python;text/x-csrc;text/x-chdr;

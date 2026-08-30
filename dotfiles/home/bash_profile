@@ -15,6 +15,29 @@ export XCURSOR_SIZE=24
 #
 # The escape hatch matters: if the desktop ever stops working, ssh in and
 # "touch ~/.no-sway" and the next console login gives a plain shell instead.
+# Which compositor: sway unless ~/.use-labwc exists.
+#
+# labwc is here for one reason -- it draws titlebar buttons on every window,
+# which sway cannot do at all, so Thunar and foot stop looking different from
+# Chromium. It is a separate desktop with its own config; nothing that calls
+# swaymsg works under it.
+#
+# Switching is creating or deleting a file, so a labwc session that misbehaves
+# is one "rm ~/.use-labwc" and a logout away from the sway desktop that works.
 if [ -z "$SSH_CONNECTION" ] && [ -z "$WAYLAND_DISPLAY" ] && [ -t 0 ] && [ ! -e "$HOME/.no-sway" ]; then
-    exec sway
+    if [ -e "$HOME/.use-labwc" ]; then
+        exec labwc
+    fi
+    # dbus-run-session, not plain sway: it starts a session bus, runs sway
+    # inside it, and everything sway launches inherits
+    # DBUS_SESSION_BUS_ADDRESS. Without one, anything that speaks D-Bus fails
+    # with "Cannot autolaunch D-Bus without X11 $DISPLAY" -- a message about
+    # X11 on a machine that has never run X, because autolaunch is an X11-era
+    # fallback and there is nothing behind it here.
+    #
+    # This is why mako never ran despite being started, why the panel could
+    # show no notifications, and why the system tray was empty. The system bus
+    # that OpenRC starts is a different thing: system-wide services, not the
+    # per-login bus desktop programs expect.
+    exec dbus-run-session sway
 fi

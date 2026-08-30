@@ -269,19 +269,29 @@ bindsym $mod+r mode "resize"
 # Status Bar:
 #
 # Read `man 5 sway-bar` for more information about this section.
-bar {
-    position top
+# swaybar is replaced by nwg-panel, which is configured with a GUI
+# (nwg-panel-config) and writes ~/.config/nwg-panel/config. It gives a real
+# system tray -- which needs D-Bus running, hence the dbus service -- plus
+# media controls and volume, none of which swaybar can do: its entire
+# interface is a command whose stdout becomes the status line.
+#
+# The old bar is kept here, commented, because it is two lines of shell and
+# the way back if nwg-panel ever will not start.
+#
+# bar {
+#     position top
+#     status_command while date +'%Y-%m-%d %X'; do sleep 1; done
+#     colors {
+#         statusline #ffffff
+#         background #323232
+#         inactive_workspace #32323200 #32323200 #5c5c5c
+#     }
+# }
 
-    # When the status_command prints a new line to stdout, swaybar updates.
-    # The default just shows the current date and time.
-    status_command while date +'%Y-%m-%d %X'; do sleep 1; done
-
-    colors {
-        statusline #ffffff
-        background #323232
-        inactive_workspace #32323200 #32323200 #5c5c5c
-    }
-}
+# Quoted so the whole line reaches sh: sway splits an unquoted line on ";"
+# into separate sway commands before any shell sees it. pkill first, or a
+# config reload leaves the old panel running and starts a second one.
+exec_always "pkill -x nwg-panel; nwg-panel"
 
 include /etc/sway/config.d/*
 
@@ -348,6 +358,14 @@ bindsym --border button2 kill
 bindsym $mod+m move scratchpad
 bindsym $mod+Shift+m scratchpad show
 bindsym $mod+space exec $menu
+
+# The application grid, Launchpad-style: every installed app as an icon.
+#
+# $mod+space is fuzzel, which is Spotlight -- type a few letters and press
+# enter. This is the other half: look rather than type. $mod+Shift+space is
+# already floating toggle, so Alt is used instead; Mod1 is otherwise unbound
+# in this config.
+bindsym $mod+Mod1+space exec nwg-drawer -c 6 -is 72
 bindsym $mod+Ctrl+f fullscreen
 
 # Maximise and restore.
