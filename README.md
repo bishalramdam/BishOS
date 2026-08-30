@@ -724,6 +724,49 @@ title in them rendered as boxes.
 in `etc/polkit-1/` authorising the `wheel` group, because polkit normally
 decides by asking logind and there is no logind here.
 
+### Software that needs glibc
+
+BishOS is musl, and some software will not run on it at any price. Widevine
+-- the DRM every streaming service requires -- is a proprietary glibc binary,
+so Netflix in Chromium reports that "secure streaming" is unavailable and no
+setting fixes it.
+
+Rebuilding the system around glibc would mean replacing 865 packages and 4 GB
+of `/usr`, which is really "install Debian and copy the dotfiles across".
+Flatpak avoids all of it: a Flatpak application runs against its own bundled
+glibc runtime and never touches the host's libraries.
+
+```bash
+sudo apk add flatpak xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-wlr
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install flathub com.brave.Browser
+flatpak override --user --env=LIBVA_DRIVER_NAME=i965 com.brave.Browser
+```
+
+Netflix plays. Three things were needed that are not obvious:
+
+**`CONFIG_FUSE_FS` in the kernel.** flatpak downloads through revokefs-fuse so
+an unprivileged user can write to the system repository. Without `/dev/fuse`
+it fails with `Can't create temporary directory`.
+
+**`xdg-desktop-portal-gtk`.** The wlr portal provides only Screenshot,
+ScreenCast and Secret; `Settings` and `FileChooser` come from the GTK backend,
+and without it Brave cannot open a file dialog.
+
+**`LIBVA_DRIVER_NAME=i965`.** The runtime picks `iHD`, which is for newer
+Intel GPUs; Haswell needs `i965` or video decodes on the CPU.
+
+One wrinkle worth knowing: a Flatpak app's window `app_id` often differs from
+its application ID, so a dock that looks icons up by `app_id` finds nothing
+and draws a broken-image X. Brave reports `brave-browser` while its icon is
+`com.brave.Browser.svg`. The `.desktop` file bridges the two -- which is why
+launchers get it right and docks do not:
+
+```bash
+ln -sf /var/lib/flatpak/exports/share/icons/hicolor/scalable/apps/com.brave.Browser.svg \
+       ~/.local/share/icons/hicolor/scalable/apps/brave-browser.svg
+```
+
 Four things had to be solved that no package installs for you:
 
 **Device permissions.** `devtmpfs` creates device nodes as `root:root 600`, so

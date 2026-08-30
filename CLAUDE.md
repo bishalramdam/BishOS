@@ -262,7 +262,7 @@ this is why.
 
 ### The error almost never names the cause
 
-Five separate failures in one day, none of which said what was wrong:
+Six separate failures in one day, none of which said what was wrong:
 
 | What it said | What it was |
 | --- | --- |
@@ -271,11 +271,35 @@ Five separate failures in one day, none of which said what was wrong:
 | `Cannot autolaunch D-Bus without X11 $DISPLAY` | no session bus, on a machine that never ran X |
 | `not authorized` (udisks2) | no logind for polkit to ask |
 | nothing at all -- apps simply did not launch | `env -S` is GNU, and `/usr/bin/env` was busybox |
+| two dark icons in a file manager sidebar | a portal package installed a GSettings schema, and GTK stopped reading settings.ini |
 
 The shape is always the same: a minimal system omits something every other
 distribution has, and the program that trips over it reports the symptom from
 wherever it happened to notice. **Read the error as "something is missing",
 not as a description of the missing thing.**
+
+### GTK reads GSettings, not settings.ini, once the schema exists
+
+`~/.config/gtk-3.0/settings.ini` was correct and GTK ignored all of it --
+reporting `Adwaita Sans 11` for a file that said `Inter 11`. GTK3 on Wayland
+prefers GSettings whenever `org.gnome.desktop.interface` is installed, and
+only falls back to settings.ini when the schema is absent.
+
+That schema arrived with `xdg-desktop-portal-gtk`, installed so a Flatpak
+browser could open a file dialog. Installing a portal reverted the entire
+desktop theme, and the only visible symptom was two dark icons in Thunar's
+sidebar -- Adwaita's `user-home` is dark and it has no `document-open-recent`
+at all, while the folder icons look similar enough in both themes to hide it.
+
+**So:** `dotfiles/apply-gsettings.sh` sets the same values through gsettings,
+and install.sh runs it. Check with
+
+```bash
+gsettings get org.gnome.desktop.interface icon-theme
+```
+
+before believing anything settings.ini says. Note also that `nwg-look` writes
+both, which is why changes made there do still work.
 
 ### /etc/profile must source /etc/profile.d
 

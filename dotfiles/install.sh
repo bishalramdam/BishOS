@@ -59,3 +59,9 @@ link home/asoundrc            .asoundrc
 
 echo
 echo "Done. Log out and back in, or press Super+Shift+C in sway."
+
+# GTK3 on Wayland reads GSettings, not settings.ini, whenever the
+# org.gnome.desktop.interface schema exists. Linking the file is not enough.
+if command -v gsettings >/dev/null 2>&1; then
+    "$DOT/apply-gsettings.sh"
+fi
