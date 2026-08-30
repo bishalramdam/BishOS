@@ -141,6 +141,10 @@ Half an hour went into debugging a program that was working.
 **So:** time things with `time`, and distrust a measurement before distrusting
 the thing measured.
 
+`coreutils` is installed now, so `/usr/bin/date` is GNU and `%N` works -- but
+the lesson stands for anything else BusyBox implements differently, and the
+ISO's initramfs still carries only busybox.
+
 ### Building a kernel is three commands
 
 ```bash
@@ -240,8 +244,47 @@ Two more things from that migration:
 A desktop assumes all three. What had to be added by hand: `seatd -g seat`
 (the `-g` matters, or the socket is root-only), device permissions for
 `/dev/dri` and `/dev/input`, `eudev` plus a trigger for hardware that already
-existed, `XDG_RUNTIME_DIR`, and the standard system groups. None of it is
-error-prone once known and all of it is invisible until something fails.
+existed, `XDG_RUNTIME_DIR`, and the standard system groups.
+
+The absence of **logind** is the one that keeps costing time, because nothing
+ever mentions it. polkit decides whether you may do something by asking logind
+whether your session is active and local; with no logind it sees no session at
+all and refuses. That surfaced as `not authorized` when mounting a disk in the
+file manager, and as `Flatpak system operation ConfigureRemote not allowed for
+user`. udev has the same hole from the other side: a rule tagging a device
+`uaccess` grants the active session user access *through logind*, so those
+rules silently do nothing here.
+
+The fix in both cases is to authorise by group instead of by session -- a
+polkit rule for `wheel`, and a group named in `etc/bishos/devperms`. Whenever
+something says "not authorized" and you are plainly sitting at the machine,
+this is why.
+
+### The error almost never names the cause
+
+Five separate failures in one day, none of which said what was wrong:
+
+| What it said | What it was |
+| --- | --- |
+| `Can't create temporary directory` (flatpak) | `CONFIG_FUSE_FS` unset, so no `/dev/fuse` |
+| `AttributeError: 'NoneType' has no attribute 'split'` | `LANG` was not set anywhere on the system |
+| `Cannot autolaunch D-Bus without X11 $DISPLAY` | no session bus, on a machine that never ran X |
+| `not authorized` (udisks2) | no logind for polkit to ask |
+| nothing at all -- apps simply did not launch | `env -S` is GNU, and `/usr/bin/env` was busybox |
+
+The shape is always the same: a minimal system omits something every other
+distribution has, and the program that trips over it reports the symptom from
+wherever it happened to notice. **Read the error as "something is missing",
+not as a description of the missing thing.**
+
+### /etc/profile must source /etc/profile.d
+
+It did not, for months. Packages install snippets there rather than editing
+`/etc/profile`, and every distribution's profile sources them -- so three
+files sat in `/etc/profile.d` being read by nobody, including the one flatpak
+installs to put its exports on `XDG_DATA_DIRS`. Without it, flatpak
+applications never appear in any launcher, and the only clue is a warning
+during install that reads like advice rather than a fault.
 
 ### /run must be a tmpfs, and PATH must include /usr/local
 

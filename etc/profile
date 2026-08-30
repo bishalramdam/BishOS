@@ -50,6 +50,24 @@ alias cls='printf "\033c"'
 # Switch into HOME directory on login
 cd "$HOME" 2>/dev/null || cd /
 
+# Drop-ins from packages.
+#
+# A package that needs something in the environment installs a snippet here
+# rather than editing /etc/profile, and every distribution's profile sources
+# them. This one did not, so three snippets sat in /etc/profile.d being
+# ignored -- including the one flatpak installs to put its exports on
+# XDG_DATA_DIRS, without which flatpak applications never appear in any
+# launcher. The failure is silent: the file is present, correct, and read by
+# nobody.
+#
+# Sourced first, so anything set below wins over a package's default.
+if [ -d /etc/profile.d ]; then
+    for _f in /etc/profile.d/*.sh; do
+        [ -r "$_f" ] && . "$_f"
+    done
+    unset _f
+fi
+
 # A locale, because a great deal of software assumes LANG exists and crashes
 # without checking. nwg-panel-config died on
 #

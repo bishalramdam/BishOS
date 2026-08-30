@@ -86,6 +86,11 @@ KERNEL_SHA256 = f5d44b93808b02cc2969c5404ba081d97523719c9fd2ba2de6db318b4141cca0
 # DDC/CI to set its actual backlight. Without it there is no device node to
 # open and ddcutil finds nothing, on a machine whose only display is external
 # and therefore has no /sys/class/backlight either.
+#
+# FUSE_FS is what flatpak needs: it downloads through revokefs-fuse so an
+# unprivileged user can write into the system repository, and with no
+# /dev/fuse that fails as "Can't create temporary directory" -- a message
+# about directories, from a missing filesystem driver.
 KERNEL_CONFIG_ENABLE = FB FB_EFI FB_VESA FRAMEBUFFER_CONSOLE \
                        FRAMEBUFFER_CONSOLE_DETECT_PRIMARY \
                        DRM_FBDEV_EMULATION DRM_SIMPLEDRM SYSFB_SIMPLEFB \
@@ -93,7 +98,7 @@ KERNEL_CONFIG_ENABLE = FB FB_EFI FB_VESA FRAMEBUFFER_CONSOLE \
                        SND_HDA_CODEC_HDMI SND_HDA_CODEC_REALTEK \
                        KERNEL_ZSTD SENSORS_CORETEMP \
                        TUN VETH BRIDGE USER_NS WIREGUARD NF_TABLES \
-                       I2C_CHARDEV
+                       I2C_CHARDEV FUSE_FS
 
 # Reject anything that is not one of the two, before a single command runs.
 # An unknown ARCH used to fall through to the x86_64 branch below, so
@@ -149,7 +154,9 @@ rootfs:
 		         /work/$(ROOTFS_DIR)/home/bishal /work/$(ROOTFS_DIR)/tmp \
 		         /work/$(ROOTFS_DIR)/etc /work/$(ROOTFS_DIR)/usr/share/udhcpc \
 		         /work/$(ROOTFS_DIR)/etc/ssl/certs /work/$(ROOTFS_DIR)/var/log \
-		         /work/$(ROOTFS_DIR)/var/empty && \
+		         /work/$(ROOTFS_DIR)/var/empty \
+		         /work/$(ROOTFS_DIR)/var/tmp && \
+		chmod 1777 /work/$(ROOTFS_DIR)/var/tmp && \
 		gcc -static -O2 -DBISHOS_VERSION=$(VERSION) /work/src/init.c -o /work/$(ROOTFS_DIR)/init && \
 		cp /bin/busybox.static /work/$(ROOTFS_DIR)/bin/busybox && \
 		chmod +x /work/$(ROOTFS_DIR)/bin/busybox && \

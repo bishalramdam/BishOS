@@ -15,3 +15,16 @@ polkit.addRule(function (action, subject) {
         return polkit.Result.YES;
     }
 });
+
+// Same problem, same fix, for Flatpak's system-wide installs.
+//
+// "Flatpak system operation ConfigureRemote not allowed for user" is polkit
+// again failing to see a session. Only needed for system installs into
+// /var/lib/flatpak; a --user install writes to ~/.local/share/flatpak and
+// asks polkit nothing at all.
+polkit.addRule(function (action, subject) {
+    if (action.id.indexOf("org.freedesktop.Flatpak.") === 0 &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

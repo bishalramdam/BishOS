@@ -692,12 +692,37 @@ sudo apk add sway seatd foot mesa mesa-dri-gallium eudev \
              pipewire pipewire-pulse wireplumber alsa-utils
 ```
 
-Then uncomment the seat manager in `/etc/bishos/services` and reboot, because
-init reads that file once at boot:
+The installed system runs OpenRC now, so seatd is a service rather than a line
+in `/etc/bishos/services`:
 
+```bash
+sudo apk add openrc busybox-openrc seatd-openrc eudev-openrc
+sudo rc-update add seatd default
 ```
-seatd  respawn  /usr/bin/seatd -g seat
+
+Four more packages, none of which a distribution would make you think about:
+
+```bash
+sudo apk add dbus coreutils font-noto-all polkit udisks2
+sudo rc-update add dbus default
+sudo rc-update add polkit default
 ```
+
+**`dbus`** because a session bus is what notifications, the system tray and
+browser keyrings all need -- and sway is started as `dbus-run-session sway` in
+`.bash_profile` so everything it launches shares one. Without it, mako sat in
+the config for weeks and never once ran.
+
+**`coreutils`** because a surprising amount of software calls GNU-only options.
+`env -S`, which nwg-drawer uses to launch everything, is not in busybox, so
+the app grid opened perfectly and started nothing.
+
+**`font-noto-all`** because fourteen scripts had no font at all and any window
+title in them rendered as boxes.
+
+**`polkit` and `udisks2`** to mount disks from the file manager -- with a rule
+in `etc/polkit-1/` authorising the `wheel` group, because polkit normally
+decides by asking logind and there is no logind here.
 
 Four things had to be solved that no package installs for you:
 
