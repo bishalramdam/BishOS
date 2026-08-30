@@ -1,0 +1,56 @@
+#!/bin/sh
+# Make flatpak application icons findable by the dock.
+#
+# A dock that identifies windows by their Wayland app_id -- nwg-dock does --
+# looks up an icon by that name. Flatpak names its icons after the
+# application ID instead, and the two often differ: Brave's window says
+# "brave-browser" while its icon is "com.brave.Browser.svg". The dock finds
+# nothing and draws a broken-image X.
+#
+# Launchers get it right because they read the .desktop file, which carries
+# both names: StartupWMClass is what the window will report, Icon is what the
+# icon is called. This reads that pairing and creates the missing link.
+#
+# Safe to run repeatedly; it only ever writes symlinks under ~/.local/share
+# and skips anything already correct.
+set -e
+
+DEST="$HOME/.local/share/icons/hicolor"
+made=0
+
+for appdir in /var/lib/flatpak/exports/share "$HOME/.local/share/flatpak/exports/share"; do
+    [ -d "$appdir/applications" ] || continue
+    for desktop in "$appdir"/applications/*.desktop; do
+        [ -e "$desktop" ] || continue
+
+        wmclass=$(awk -F= '/^StartupWMClass=/{print $2; exit}' "$desktop")
+        icon=$(awk -F= '/^Icon=/{print $2; exit}' "$desktop")
+
+        # Nothing to bridge if either is missing or they already match.
+        [ -n "$wmclass" ] && [ -n "$icon" ] || continue
+        [ "$wmclass" != "$icon" ] || continue
+
+        # Link every size the icon exists in, not just one: the dock asks for
+        # 48px, the panel for 16, and a scalable svg does not satisfy a
+        # lookup that wants a specific pixel directory.
+        for src in "$appdir"/icons/hicolor/*/apps/"$icon".*; do
+            [ -e "$src" ] || continue
+            size=$(basename "$(dirname "$(dirname "$src")")")
+            ext=${src##*.}
+            mkdir -p "$DEST/$size/apps"
+            target="$DEST/$size/apps/$wmclass.$ext"
+            [ -L "$target" ] && [ "$(readlink "$target")" = "$src" ] && continue
+            ln -sfn "$src" "$target"
+            made=$((made + 1))
+            echo "  $wmclass ($size) -> $icon"
+        done
+    done
+done
+
+if [ "$made" -gt 0 ]; then
+    command -v gtk-update-icon-cache >/dev/null 2>&1 &&
+        gtk-update-icon-cache -f -t "$DEST" >/dev/null 2>&1 || true
+    echo "linked $made icon(s)"
+else
+    echo "nothing to do -- every flatpak icon already resolves"
+fi
