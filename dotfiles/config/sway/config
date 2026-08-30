@@ -475,4 +475,19 @@ bindsym Shift+Print exec f=~/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png
 #   -nows   no workspace switcher. It defaults to eight workspaces whether or
 #           not they exist, so clicking one takes you to an empty screen
 #   -i 48   icon size
-exec nwg-dock -d -hd 0 -nows -i 48 -p bottom
+#   -lp start   the launcher button on the LEFT of the icons. macOS puts
+#               Launchpad there; nwg-dock defaults to the right. Those are
+#               the only two choices -- the button is not draggable, and
+#               neither are the app icons.
+#   -c          deliberately not set. The button then runs plain "nwg-drawer",
+#               which finds the resident instance through its lock file, sends
+#               it SIGUSR1 and exits -- the same toggle $mod+Alt+space does.
+#               Passing -c 'pkill -SIGUSR1 -x nwg-drawer' would be equivalent
+#               but needs quotes inside quotes, which sway's parser mangles
+#               into a dock that never starts.
+#
+# exec_always, not exec: "exec" only runs when sway starts, so killing the
+# dock and reloading leaves it dead until the next login. The pkill is what
+# stops a reload stacking a second copy, and the whole line is quoted because
+# sway splits on ";" into separate sway commands before any shell sees it.
+exec_always "pkill -x nwg-dock; nwg-dock -d -hd 0 -nows -i 48 -p bottom -lp start"
