@@ -365,7 +365,14 @@ bindsym $mod+space exec $menu
 # enter. This is the other half: look rather than type. $mod+Shift+space is
 # already floating toggle, so Alt is used instead; Mod1 is otherwise unbound
 # in this config.
-bindsym $mod+Mod1+space exec nwg-drawer -c 6 -is 72
+#
+# -r keeps it resident and hidden, and the keybinding then sends SIGUSR1 to
+# the running copy instead of starting a new one. That matters here: the
+# binary is 67 MB of statically linked GTK, and reading that off a 5400 rpm
+# disk on every keypress is most of a second before anything appears.
+# Resident, the window is already built and only has to be shown.
+exec nwg-drawer -r -c 6 -is 72
+bindsym $mod+Mod1+space exec pkill -SIGUSR1 -x nwg-drawer
 bindsym $mod+Ctrl+f fullscreen
 
 # Maximise and restore.
