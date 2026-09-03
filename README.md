@@ -85,39 +85,6 @@ Both paths are in the boot menu, so the old one is always one keypress away.
 `init=/bin/init` explicitly, which is what lets the two coexist with nothing
 on disk renamed.
 
-### Where it actually lives
-
-BishOS started on a USB stick and no longer runs from one. The current layout,
-on a 1 TB WD spinning disk that already held 143 GB of documents:
-
-| Partition | Size | Label | Holds |
-| --- | --- | --- | --- |
-| `sda1` | 708 GiB | `Storage-1TB` | pre-existing data, untouched |
-| `sda2` | 512 MiB | `BISHOS-ESP` | GRUB and the kernel |
-| `sda3` | 213 GiB | `BISHOS-HDD` | the root filesystem |
-| `sda4` | 9.5 GiB | `BISHOS-SWAP` | swap, sized for hibernation |
-
-The command line the firmware ends up passing:
-
-```
-root=PARTUUID=99534115-... rootwait rw
-resume=PARTUUID=cca78b6d-...
-init=/bin/init console=ttyS0 console=tty0 fbcon=font:TER16x32 quiet
-```
-
-Making room meant shrinking a live 916 GB ext4 filesystem down to 700 GiB, then
-shrinking its partition to match. **The order matters and is not symmetric:**
-shrink the filesystem first and the partition second; to grow, do the reverse.
-A partition may be larger than the filesystem inside it and must never be
-smaller.
-
-The ESP is 512 MiB rather than the 100 MB the bootloader alone would need,
-because the space goes to kernels rather than to GRUB -- `bootx64.efi` is
-208 KB while each kernel is 12.5 MB, and keeping the previous two is what makes
-a bad kernel a menu choice instead of a rescue USB.
-
----
-
 ## 🚀 Quickstart
 
 ### Prerequisites
