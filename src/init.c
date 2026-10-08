@@ -79,12 +79,6 @@ static void do_shutdown(int sig) {
         ;                // bury whatever is left
 
     sync();
-    // Read-only remount is what keeps a persistent root from needing fsck
-    // on the next boot. Harmless on a RAM-only initramfs boot.
-    if (mount(NULL, "/", NULL, MS_REMOUNT | MS_RDONLY, NULL) != 0) {
-        printf("[BishOS] note: could not remount / read-only (%s)\n", strerror(errno));
-    }
-    printf("[BishOS] Bye!\n");
 
     if (sig == SIGTERM) {
         reboot(RB_AUTOBOOT);
