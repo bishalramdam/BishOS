@@ -334,13 +334,6 @@ then tried `matrix-rain` as a sway command. `swaymsg` says so plainly --
 the wallpaper simply never appeared, which looks like the program failing.
 Quote the whole thing so it reaches `sh` as one command.
 
-### A process name is truncated to 15 characters
-
-`matrix-wallpaper` is 16, so it appeared in `/proc` as `matrix-wallpape` and
-`pkill -x matrix-wallpaper` matched nothing -- every config reload stacked
-another copy. `pkill -f` matches, but it also matches the shell sway runs the
-line in and kills the parent before the program starts. Name things so they
-fit.
 
 ### Hardware lies
 
